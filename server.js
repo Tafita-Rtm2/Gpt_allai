@@ -34,7 +34,7 @@ const authenticateKey = (req, res, next) => {
 
 // Route GET "/" -> message d'accueil
 app.get("/", (req, res) => {
-  res.json({ status: "ok", message: "Proxy actif. Utilisez /v1/chat/completions ou /v1/chat/messages" });
+  res.json({ status: "ok", message: "Proxy actif. Utilisez /v1/chat/completions ou /v1/messages" });
 });
 
 // Mapping des modèles (alias)
@@ -84,8 +84,8 @@ app.post("/v1/chat/completions", authenticateKey, async (req, res) => {
   }
 });
 
-// Route compatible Anthropic : /v1/chat/messages (modifié depuis /v1/messages)
-app.post("/v1/chat/messages", authenticateKey, async (req, res) => {
+// Route compatible Anthropic : /v1/messages
+app.post("/v1/messages", authenticateKey, async (req, res) => {
   try {
     const { messages, model } = req.body;
     const ask = messages && messages.length > 0 ? messages[messages.length - 1].content : "";
