@@ -1,130 +1,160 @@
-import express from "express";
-import fetch from "node-fetch";
-import bodyParser from "body-parser";
-import dotenv from "dotenv";
-import cors from "cors";
+// Load environment variables from .env file
+require('dotenv').config();
 
-dotenv.config();
+const express = require('express');
+const axios = require('axios');
+
 const app = express();
+app.use(express.json());
 
-// Middlewares
-app.use(cors());
-app.use(bodyParser.json());
+// --- CONFIGURATION ---
+const PORT = process.env.PORT || 3000;
+const HAJI_API_URL = 'https://haji-mix-api.gleeze.com/api/anthropic';
+const HAJI_API_KEY = process.env.HAJI_API_KEY;
+const MY_SERVER_API_KEY = process.env.MY_SERVER_API_KEY;
 
-// Helper pour formater les erreurs comme OpenAI
-const sendOpenAIError = (res, message, type, code, statusCode) => {
-  res.status(statusCode).json({
-    error: {
-      message,
-      type,
-      param: null,
-      code,
-    },
-  });
-};
-
-// Middleware d'authentification flexible
-const authenticateKey = (req, res, next) => {
-  let token = null;
-
-  if (req.headers.authorization) {
-    const parts = req.headers.authorization.split(' ');
-    if (parts.length === 2 && parts[0].toLowerCase() === 'bearer') {
-      token = parts[1];
-    } else {
-      token = req.headers.authorization;
-    }
-  } else if (req.headers['x-api-key']) {
-    token = req.headers['x-api-key'];
-  } else if (req.headers['api-key']) {
-    token = req.headers['api-key'];
+// --- AUTHENTICATION MIDDLEWARE ---
+// This middleware checks for a valid API key in the Authorization header.
+const authenticate = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({ error: 'Authorization header is missing' });
   }
 
-  if (!token) {
-    return sendOpenAIError(res, "Vous n'avez pas fourni de clé API. Vous devez en fournir une dans un en-tête 'Authorization'.", "invalid_request_error", "api_key_missing", 401);
-  }
-
-  const validKeys = (process.env.PROXY_API_KEYS || "").split(',');
-  if (!validKeys.includes(token)) {
-    return sendOpenAIError(res, "Clé API incorrecte fournie. Vous pouvez en générer une sur notre site.", "invalid_request_error", "invalid_api_key", 401);
+  const token = authHeader.split(' ')[1];
+  if (token !== MY_SERVER_API_KEY) {
+    return res.status(403).json({ error: 'Invalid API key' });
   }
 
   next();
 };
 
-// Route GET "/" -> message d'accueil
-app.get("/", (req, res) => {
-  res.json({ status: "ok", message: "Proxy actif. Utilisez /chat/completions ou /messages" });
+// Apply the authentication middleware to all routes that require it
+app.use('/v1', authenticate);
+
+// --- API ENDPOINTS ---
+
+/**
+ * Endpoint to list available models.
+ * GET /v1/models
+ * The Chatbox app calls this to get a list of models to display.
+ * We will call the haji-mix-api, get the `supported_models` list,
+ * and transform it into the OpenAI models list format.
+ */
+app.get('/v1/models', async (req, res) => {
+  try {
+    // Call the external API. We just need any valid call to get the model list.
+    const response = await axios.get(HAJI_API_URL, {
+      params: {
+        ask: 'hello', // A dummy question to get a valid response
+        model: 'claude-3-opus-20240229', // A default model
+        api_key: HAJI_API_KEY,
+      },
+    });
+
+    const supportedModels = response.data.supported_models;
+
+    if (!supportedModels || !Array.isArray(supportedModels)) {
+      throw new Error('Could not retrieve supported models from the external API.');
+    }
+
+    // Transform the list into the format expected by OpenAI-compatible clients
+    const modelsData = supportedModels.map(modelId => ({
+      id: modelId,
+      object: 'model',
+      created: Math.floor(Date.now() / 1000), // Use current timestamp
+      owned_by: 'haji-mix-api', // A descriptive owner
+    }));
+
+    res.json({
+      object: 'list',
+      data: modelsData,
+    });
+  } catch (error) {
+    console.error('Error fetching models:', error.message);
+    res.status(500).json({ error: 'Failed to fetch models from the external API.' });
+  }
 });
 
-// Mapping des modèles (alias)
-const modelMap = {
-  "claude-opus-4.1": "claude-opus-4-20250514",
-  "claude-opus-4-0": "claude-opus-4-20250514",
-  "claude-sonnet-4-0": "claude-sonnet-4-20250514",
-  "claude-3-7-sonnet-latest": "claude-3-7-sonnet-20250219",
-  "claude-3-5-sonnet-latest": "claude-3-5-sonnet-20241022",
-  "claude-3-5-haiku-latest": "claude-3-5-haiku-20241022",
-  "claude-3-opus-latest": "claude-3-opus-20240229"
-};
+/**
+ * Endpoint for chat completions.
+ * POST /v1/chat/completions
+ * This is the main endpoint for chat. It receives a request in OpenAI format,
+ * translates it, calls the haji-mix-api, and then translates the response back.
+ */
+app.post('/v1/chat/completions', async (req, res) => {
+  const { model, messages, stream } = req.body;
 
-// Route GET "/models" pour lister les modèles disponibles
-app.get("/models", (req, res) => {
-  const modelIds = Object.keys(modelMap);
-  const modelData = modelIds.map(id => ({
-    id: id,
-    object: "model",
-    created: Math.floor(Date.now() / 1000),
-    owned_by: "proxy-user"
-  }));
+  if (stream) {
+    return res.status(400).json({ error: 'Streaming is not supported by this proxy.' });
+  }
+  
+  if (!messages || !Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: 'Invalid or empty messages array.' });
+  }
 
-  res.json({
-    object: "list",
-    data: modelData
-  });
-});
-
-// Fonction proxy qui retourne la réponse BRUTE
-async function callGleeze(ask, model) {
-  const targetModel = modelMap[model] || model;
-  const url = `https://haji-mix-api.gleeze.com/api/anthropic?ask=${encodeURIComponent(ask)}&model=${targetModel}&uid=2&roleplay=&max_tokens=&stream=false&img_url=&api_key=${process.env.GLEEZE_API_KEY}`;
+  // Find the last user message to use as the prompt
+  const userMessage = messages.filter(m => m.role === 'user').pop();
+  if (!userMessage || !userMessage.content) {
+    return res.status(400).json({ error: 'No user message found in the request.' });
+  }
 
   try {
-    const response = await fetch(url, { method: "GET" });
-    const body = await response.text();
+    // --- 1. Call the external API ---
+    const response = await axios.get(HAJI_API_URL, {
+      params: {
+        ask: userMessage.content,
+        model: model,
+        api_key: HAJI_API_KEY,
+        // You can add other parameters like 'uid' here if needed
+      },
+    });
 
-    if (!response.ok) {
-      return { error: true, message: `L'API distante a répondu avec le statut ${response.status}. Réponse: ${body}`, type: 'downstream_api_error', code: 'http_error' };
-    }
+    const apiResponse = response.data;
 
-    return { error: false, body: body };
+    // --- 2. Transform the response to OpenAI format ---
+    const openAIFormattedResponse = {
+      id: `chatcmpl-${Date.now()}`, // Create a unique ID
+      object: 'chat.completion',
+      created: Math.floor(Date.now() / 1000),
+      model: apiResponse.model_used,
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: apiResponse.answer,
+          },
+          finish_reason: 'stop',
+        },
+      ],
+      usage: {
+        // The haji-mix-api does not provide token usage, so we'll use placeholders.
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+      },
+    };
+
+    res.json(openAIFormattedResponse);
+
   } catch (error) {
-    return { error: true, message: `Impossible de contacter l'API distante. Détails: ${error.message}`, type: 'downstream_api_error', code: 'network_error' };
-  }
-}
-
-// Les routes de chat agissent maintenant comme un proxy transparent
-const handleChatProxy = async (req, res) => {
-    try {
-        const { messages, model } = req.body;
-        const ask = messages && messages.length > 0 ? messages[messages.length - 1].content : "";
-
-        const result = await callGleeze(ask, model);
-
-        if (result.error) {
-            return sendOpenAIError(res, result.message, result.type, result.code, 500);
-        }
-
-        res.setHeader('Content-Type', 'application/json');
-        res.send(result.body);
-
-    } catch (err) {
-        sendOpenAIError(res, `Une erreur interne inattendue s'est produite. Détails: ${err.message}`, 'internal_server_error', 'proxy_error', 500);
+    console.error('Error during chat completion:', error.message);
+    // Check if the error is from the external API
+    if (error.response) {
+      return res.status(error.response.status).json({ 
+        error: 'An error occurred with the external API.',
+        details: error.response.data
+      });
     }
-};
+    res.status(500).json({ error: 'An internal server error occurred.' });
+  }
+});
 
-app.post("/chat/completions", authenticateKey, handleChatProxy);
-app.post("/messages", authenticateKey, handleChatProxy);
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`✅ Proxy actif sur http://localhost:${PORT}`));
+// --- SERVER START ---
+app.listen(PORT, () => {
+  console.log(`OpenAI-compatible proxy server is running on http://localhost:${PORT}`);
+  if (!HAJI_API_KEY || !MY_SERVER_API_KEY) {
+    console.warn('Warning: API keys are not set. Please check your .env file.');
+  }
+});
