@@ -11,43 +11,46 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
+// Helper pour formater les erreurs comme OpenAI
+const sendOpenAIError = (res, message, type, code, statusCode) => {
+  res.status(statusCode).json({
+    error: {
+      message,
+      type,
+      param: null,
+      code,
+    },
+  });
+};
+
 // Middleware d'authentification flexible
 const authenticateKey = (req, res, next) => {
   let token = null;
 
-  // 1. Chercher dans 'Authorization: Bearer <token>'
   if (req.headers.authorization) {
     const parts = req.headers.authorization.split(' ');
     if (parts.length === 2 && parts[0].toLowerCase() === 'bearer') {
       token = parts[1];
     } else {
-      // 2. Chercher dans 'Authorization: <token>' (sans Bearer)
       token = req.headers.authorization;
     }
-  }
-
-  // 3. Si non trouvé, chercher dans l'en-tête 'x-api-key'
-  if (!token && req.headers['x-api-key']) {
+  } else if (req.headers['x-api-key']) {
     token = req.headers['x-api-key'];
-  }
-
-  // 4. Si non trouvé, chercher dans l'en-tête 'api-key'
-  if (!token && req.headers['api-key']) {
+  } else if (req.headers['api-key']) {
     token = req.headers['api-key'];
   }
 
   if (!token) {
-    return res.status(401).json({ error: "Clé API manquante ou envoyée dans un format non standard." });
+    return sendOpenAIError(res, "Vous n'avez pas fourni de clé API. Vous devez en fournir une dans un en-tête 'Authorization'.", "invalid_request_error", "api_key_missing", 401);
   }
 
   const validKeys = (process.env.PROXY_API_KEYS || "").split(',');
   if (!validKeys.includes(token)) {
-    return res.status(401).json({ error: "Clé API invalide." });
+    return sendOpenAIError(res, "Clé API incorrecte fournie. Vous pouvez en générer une sur notre site.", "invalid_request_error", "invalid_api_key", 401);
   }
 
   next();
 };
-
 
 // Route GET "/" -> message d'accueil
 app.get("/", (req, res) => {
@@ -68,27 +71,24 @@ const modelMap = {
 // Fonction proxy
 async function callGleeze(ask, model) {
   const targetModel = modelMap[model] || model;
-
   const url = `https://haji-mix-api.gleeze.com/api/anthropic?ask=${encodeURIComponent(ask)}&model=${targetModel}&uid=2&roleplay=&max_tokens=&stream=false&img_url=&api_key=${process.env.GLEEZE_API_KEY}`;
 
   try {
     const response = await fetch(url, { method: "GET" });
     if (!response.ok) {
-      return { answer: `[Erreur : L'API distante a répondu avec le statut ${response.status}]` };
+      // Retourne un objet d'erreur que l'appelant peut utiliser
+      return { error: true, message: `L'API distante a répondu avec le statut ${response.status}`, type: 'downstream_api_error', code: 'http_error' };
     }
-    return response.json();
+    const data = await response.json();
+    // Vérification de la réponse de l'API distante
+    if (!data.answer || typeof data.answer !== 'string' || data.answer.startsWith(',,,') || data.answer.includes('tokens used')) {
+        return { error: true, message: "L'API distante a retourné une réponse invalide ou un message d'erreur.", type: 'downstream_api_error', code: 'bad_response' };
+    }
+    return data;
   } catch (error) {
-    return { answer: `[Erreur : Impossible de contacter l'API distante. Détails: ${error.message}]` };
+    return { error: true, message: `Impossible de contacter l'API distante. Détails: ${error.message}`, type: 'downstream_api_error', code: 'network_error' };
   }
 }
-
-// Fonction pour nettoyer la réponse de l'API distante
-const getCleanedAnswer = (rawAnswer) => {
-  if (!rawAnswer || typeof rawAnswer !== 'string' || rawAnswer.startsWith(',,,') || rawAnswer.includes('tokens used')) {
-    return "[Désolé, une erreur s'est produite avec l'API distante.]";
-  }
-  return rawAnswer;
-};
 
 // Route compatible OpenAI : /chat/completions
 app.post("/chat/completions", authenticateKey, async (req, res) => {
@@ -97,23 +97,20 @@ app.post("/chat/completions", authenticateKey, async (req, res) => {
     const ask = messages && messages.length > 0 ? messages[messages.length - 1].content : "";
 
     const data = await callGleeze(ask, model);
-    const finalAnswer = getCleanedAnswer(data.answer);
+
+    if (data.error) {
+        return sendOpenAIError(res, data.message, data.type, data.code, 500);
+    }
 
     res.json({
       id: "chatcmpl-" + Date.now(),
       object: "chat.completion",
       created: Math.floor(Date.now() / 1000),
       model: model,
-      choices: [
-        {
-          index: 0,
-          message: { role: "assistant", content: finalAnswer },
-          finish_reason: "stop"
-        }
-      ]
+      choices: [ { index: 0, message: { role: "assistant", content: data.answer }, finish_reason: "stop" } ]
     });
   } catch (err) {
-    res.status(500).json({ error: "Proxy error", details: err.message });
+    sendOpenAIError(res, `Une erreur interne inattendue s'est produite. Détails: ${err.message}`, 'internal_server_error', 'proxy_error', 500);
   }
 });
 
@@ -124,19 +121,22 @@ app.post("/messages", authenticateKey, async (req, res) => {
     const ask = messages && messages.length > 0 ? messages[messages.length - 1].content : "";
 
     const data = await callGleeze(ask, model);
-    const finalAnswer = getCleanedAnswer(data.answer);
+
+    if (data.error) {
+        return sendOpenAIError(res, data.message, data.type, data.code, 500);
+    }
 
     res.json({
       id: "msg-" + Date.now(),
       type: "message",
       role: "assistant",
-      content: [{ type: "text", text: finalAnswer }],
+      content: [{ type: "text", text: data.answer }],
       model: model,
       stop_reason: "end_turn",
       stop_sequence: null
     });
   } catch (err) {
-    res.status(500).json({ error: "Proxy error", details: err.message });
+    sendOpenAIError(res, `Une erreur interne inattendue s'est produite. Détails: ${err.message}`, 'internal_server_error', 'proxy_error', 500);
   }
 });
 
