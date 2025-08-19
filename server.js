@@ -11,21 +11,38 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// Middleware d'authentification
+// Middleware d'authentification flexible
 const authenticateKey = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    return res.status(401).json({ error: "Authorization header missing" });
+  let token = null;
+
+  // 1. Chercher dans 'Authorization: Bearer <token>'
+  if (req.headers.authorization) {
+    const parts = req.headers.authorization.split(' ');
+    if (parts.length === 2 && parts[0].toLowerCase() === 'bearer') {
+      token = parts[1];
+    } else {
+      // 2. Chercher dans 'Authorization: <token>' (sans Bearer)
+      token = req.headers.authorization;
+    }
   }
 
-  const token = authHeader.split(' ')[1];
+  // 3. Si non trouvé, chercher dans l'en-tête 'x-api-key'
+  if (!token && req.headers['x-api-key']) {
+    token = req.headers['x-api-key'];
+  }
+
+  // 4. Si non trouvé, chercher dans l'en-tête 'api-key'
+  if (!token && req.headers['api-key']) {
+    token = req.headers['api-key'];
+  }
+
   if (!token) {
-    return res.status(401).json({ error: "Bearer token missing" });
+    return res.status(401).json({ error: "Clé API manquante ou envoyée dans un format non standard." });
   }
 
   const validKeys = (process.env.PROXY_API_KEYS || "").split(',');
   if (!validKeys.includes(token)) {
-    return res.status(401).json({ error: "Invalid API Key" });
+    return res.status(401).json({ error: "Clé API invalide." });
   }
 
   next();
