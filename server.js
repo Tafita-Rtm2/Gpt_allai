@@ -71,9 +71,24 @@ async function callGleeze(ask, model) {
 
   const url = `https://haji-mix-api.gleeze.com/api/anthropic?ask=${encodeURIComponent(ask)}&model=${targetModel}&uid=2&roleplay=&max_tokens=&stream=false&img_url=&api_key=${process.env.GLEEZE_API_KEY}`;
 
-  const response = await fetch(url, { method: "GET" });
-  return response.json();
+  try {
+    const response = await fetch(url, { method: "GET" });
+    if (!response.ok) {
+      return { answer: `[Erreur : L'API distante a répondu avec le statut ${response.status}]` };
+    }
+    return response.json();
+  } catch (error) {
+    return { answer: `[Erreur : Impossible de contacter l'API distante. Détails: ${error.message}]` };
+  }
 }
+
+// Fonction pour nettoyer la réponse de l'API distante
+const getCleanedAnswer = (rawAnswer) => {
+  if (!rawAnswer || typeof rawAnswer !== 'string' || rawAnswer.startsWith(',,,') || rawAnswer.includes('tokens used')) {
+    return "[Désolé, une erreur s'est produite avec l'API distante.]";
+  }
+  return rawAnswer;
+};
 
 // Route compatible OpenAI : /chat/completions
 app.post("/chat/completions", authenticateKey, async (req, res) => {
@@ -82,6 +97,7 @@ app.post("/chat/completions", authenticateKey, async (req, res) => {
     const ask = messages && messages.length > 0 ? messages[messages.length - 1].content : "";
 
     const data = await callGleeze(ask, model);
+    const finalAnswer = getCleanedAnswer(data.answer);
 
     res.json({
       id: "chatcmpl-" + Date.now(),
@@ -91,7 +107,7 @@ app.post("/chat/completions", authenticateKey, async (req, res) => {
       choices: [
         {
           index: 0,
-          message: { role: "assistant", content: data.answer },
+          message: { role: "assistant", content: finalAnswer },
           finish_reason: "stop"
         }
       ]
@@ -108,12 +124,13 @@ app.post("/messages", authenticateKey, async (req, res) => {
     const ask = messages && messages.length > 0 ? messages[messages.length - 1].content : "";
 
     const data = await callGleeze(ask, model);
+    const finalAnswer = getCleanedAnswer(data.answer);
 
     res.json({
       id: "msg-" + Date.now(),
       type: "message",
       role: "assistant",
-      content: [{ type: "text", text: data.answer }],
+      content: [{ type: "text", text: finalAnswer }],
       model: model,
       stop_reason: "end_turn",
       stop_sequence: null
