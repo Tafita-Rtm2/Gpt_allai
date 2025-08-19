@@ -34,7 +34,7 @@ const authenticateKey = (req, res, next) => {
 
 // Route GET "/" -> message d'accueil
 app.get("/", (req, res) => {
-  res.json({ status: "ok", message: "Proxy actif. Utilisez /v1/chat/completions ou /v1/messages" });
+  res.json({ status: "ok", message: "Proxy actif. Utilisez /chat/completions ou /messages" });
 });
 
 // Mapping des modèles (alias)
@@ -58,8 +58,8 @@ async function callGleeze(ask, model) {
   return response.json();
 }
 
-// Route compatible OpenAI : /v1/chat/completions
-app.post("/v1/chat/completions", authenticateKey, async (req, res) => {
+// Route compatible OpenAI : /chat/completions
+app.post("/chat/completions", authenticateKey, async (req, res) => {
   try {
     const { messages, model } = req.body;
     const ask = messages && messages.length > 0 ? messages[messages.length - 1].content : "";
@@ -84,8 +84,8 @@ app.post("/v1/chat/completions", authenticateKey, async (req, res) => {
   }
 });
 
-// Route compatible Anthropic : /v1/messages
-app.post("/v1/messages", authenticateKey, async (req, res) => {
+// Route compatible Anthropic : /messages
+app.post("/messages", authenticateKey, async (req, res) => {
   try {
     const { messages, model } = req.body;
     const ask = messages && messages.length > 0 ? messages[messages.length - 1].content : "";
