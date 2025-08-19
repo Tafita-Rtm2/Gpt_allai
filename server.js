@@ -57,6 +57,22 @@ app.get("/", (req, res) => {
   res.json({ status: "ok", message: "Proxy actif. Utilisez /chat/completions ou /messages" });
 });
 
+// Route GET "/models" pour lister les modèles disponibles
+app.get("/models", (req, res) => {
+  const modelIds = Object.keys(modelMap);
+  const modelData = modelIds.map(id => ({
+    id: id,
+    object: "model",
+    created: Math.floor(Date.now() / 1000),
+    owned_by: "proxy-user"
+  }));
+
+  res.json({
+    object: "list",
+    data: modelData
+  });
+});
+
 // Mapping des modèles (alias)
 const modelMap = {
   "claude-opus-4.1": "claude-opus-4-20250514",
