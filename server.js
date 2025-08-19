@@ -109,6 +109,7 @@ app.post('/v1/chat/completions', async (req, res) => {
 
   try {
     // --- 1. Call the external API ---
+    console.log(`Attempting to call external API for model ${model}...`);
     const response = await axios.get(HAJI_API_URL, {
       params: {
         ask: userMessage.content,
@@ -116,7 +117,9 @@ app.post('/v1/chat/completions', async (req, res) => {
         api_key: HAJI_API_KEY,
         // You can add other parameters like 'uid' here if needed
       },
+      timeout: 20000 // 20-second timeout
     });
+    console.log('External API call successful.');
 
     const apiResponse = response.data;
 
