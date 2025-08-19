@@ -7,9 +7,30 @@ dotenv.config();
 const app = express();
 app.use(bodyParser.json());
 
+// Middleware d'authentification
+const authenticateKey = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({ error: "Authorization header missing" });
+  }
+
+  const token = authHeader.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ error: "Bearer token missing" });
+  }
+
+  const validKeys = (process.env.PROXY_API_KEYS || "").split(',');
+  if (!validKeys.includes(token)) {
+    return res.status(401).json({ error: "Invalid API Key" });
+  }
+
+  next();
+};
+
+
 // Route GET "/" -> message d'accueil
 app.get("/", (req, res) => {
-  res.json({ status: "ok", message: "Proxy actif. Utilisez /v1/chat/completions ou /v1/messages" });
+  res.json({ status: "ok", message: "Proxy actif. Utilisez /v1/chat/completions ou /v1/chat/messages" });
 });
 
 // Mapping des modèles (alias)
@@ -34,7 +55,7 @@ async function callGleeze(ask, model) {
 }
 
 // Route compatible OpenAI : /v1/chat/completions
-app.post("/v1/chat/completions", async (req, res) => {
+app.post("/v1/chat/completions", authenticateKey, async (req, res) => {
   try {
     const { messages, model } = req.body;
     const ask = messages && messages.length > 0 ? messages[messages.length - 1].content : "";
@@ -59,8 +80,8 @@ app.post("/v1/chat/completions", async (req, res) => {
   }
 });
 
-// Route compatible Anthropic : /v1/messages
-app.post("/v1/messages", async (req, res) => {
+// Route compatible Anthropic : /v1/chat/messages (modifié depuis /v1/messages)
+app.post("/v1/chat/messages", authenticateKey, async (req, res) => {
   try {
     const { messages, model } = req.body;
     const ask = messages && messages.length > 0 ? messages[messages.length - 1].content : "";
