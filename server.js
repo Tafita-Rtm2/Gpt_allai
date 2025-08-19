@@ -2,9 +2,13 @@ import express from "express";
 import fetch from "node-fetch";
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
+import cors from "cors";
 
 dotenv.config();
 const app = express();
+
+// Middlewares
+app.use(cors());
 app.use(bodyParser.json());
 
 // Middleware d'authentification
