@@ -9,6 +9,12 @@ const app = express();
 app.use(express.json());
 app.use(cors()); // Enable CORS for all routes
 
+// Logging middleware to see all incoming requests
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] Received ${req.method} request for ${req.url}`);
+  next();
+});
+
 // --- CONFIGURATION ---
 const PORT = process.env.PORT || 3000;
 const HAJI_API_URL = 'https://haji-mix-api.gleeze.com/api/anthropic';
