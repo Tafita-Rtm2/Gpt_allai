@@ -21,9 +21,10 @@ const PORT = process.env.PORT || 3000;
 const HAJI_API_KEY = process.env.HAJI_API_KEY;
 const MY_SERVER_API_KEY = process.env.MY_SERVER_API_KEY;
 const IMGBB_API_KEY = process.env.IMGBB_API_KEY;
-// API URLs from .env for security
-
-const IMGBB_UPLOAD_URL = process.env.IMGBB_UPLOAD_URL || 'https://api.imgbb.com/1/upload';
+// API URLs from .env for security. No fallbacks for better security.
+const HAJI_ANTHROPIC_URL = process.env.HAJI_ANTHROPIC_URL;
+const HAJI_FLUX_URL = process.env.HAJI_FLUX_URL;
+const IMGBB_UPLOAD_URL = process.env.IMGBB_UPLOAD_URL;
 
 const imageGenerationKeywords = [
     'generate image of', 'generate an image of', 'generate image', 'generate an image', 'generate',
@@ -69,7 +70,6 @@ app.get('/v1/models', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch models.' });
   }
 });
-
 app.post('/v1/chat/completions', async (req, res) => {
   const { model, messages, stream, user } = req.body;
   if (!messages || messages.length === 0) {
@@ -101,8 +101,6 @@ app.post('/v1/chat/completions', async (req, res) => {
 
     if (triggerKeyword && !imageUrl) {
       const prompt = ask.substring(triggerKeyword.length).trim();
-      console.log(`Image generation triggered for user ${uid} with prompt: "${prompt}"`);
-
       const fluxResponse = await axios.get(HAJI_FLUX_URL, {
         params: { prompt, api_key: HAJI_API_KEY, uid },
         responseType: 'arraybuffer',
@@ -136,7 +134,6 @@ app.post('/v1/chat/completions', async (req, res) => {
       }
       return;
     }
-
     let finalImageUrl = null;
     if (imageUrl) {
       if (imageUrl.startsWith('data:image')) {
@@ -172,7 +169,7 @@ app.post('/v1/chat/completions', async (req, res) => {
       res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
       const contentChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { content: answer }, finish_reason: null }] };
       res.write(`data: ${JSON.stringify(contentChunk)}\n\n`);
-      const stopChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
+      const stopChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(DateI9.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
       res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
       res.write('data: [DONE]\n\n');
       res.end();
@@ -219,7 +216,16 @@ app.post('/v1/images/generations', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`OpenAI-compatible proxy server is running on http://localhost:${PORT}`);
-  if (!HAJI_API_KEY || !MY_SERVER_API_KEY || !IMGBB_API_KEY) {
-    console.warn('Warning: One or more API keys (HAJI_API_KEY, MY_SERVER_API_KEY, IMGBB_API_KEY) are not set in .env file.');
+  
+  const requiredVars = [
+    'HAJI_API_KEY', 'MY_SERVER_API_KEY', 'IMGBB_API_KEY',
+    'HAJI_ANTHROPIC_URL', 'HAJI_FLUX_URL', 'IMGBB_UPLOAD_URL'
+  ];
+  const missingVars = requiredVars.filter(v => !process.env[v]);
+
+  if (missingVars.length > 0) {
+    console.warn(`\n!!! WARNING: The following required environment variables are not set in your .env file:`);
+    missingVars.forEach(v => console.warn(`- ${v}`));
+    console.warn('The application will likely fail without them.\n');
   }
 });
