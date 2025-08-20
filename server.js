@@ -4,27 +4,32 @@ require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
-const FormData = require('form-data'); // Added for image uploads
+const FormData = require('form-data');
 
 const app = express();
-// Increased body limit to handle large Base64 image strings
 app.use(express.json({ limit: '50mb' }));
-app.use(cors()); // Enable CORS for all routes
+app.use(cors());
 
-// Logging middleware to see all incoming requests
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] Received ${req.method} request for ${req.url}`);
   next();
 });
 
-// --- CONFIGURATION ---
 const PORT = process.env.PORT || 3000;
 const HAJI_API_URL = 'https://haji-mix-api.gleeze.com/api/anthropic';
 const HAJI_API_KEY = process.env.HAJI_API_KEY;
 const MY_SERVER_API_KEY = process.env.MY_SERVER_API_KEY;
-const IMGBB_API_KEY = process.env.IMGBB_API_KEY; // API key for ImgBB
+const IMGBB_API_KEY = process.env.IMGBB_API_KEY;
 
-// --- AUTHENTICATION MIDDLEWARE ---
+const imageGenerationKeywords = [
+    'generate image of', 'generate an image of', 'generate image', 'generate an image', 'generate',
+    'create image of', 'create an image of', 'create image', 'create an image', 'create',
+    'draw image of', 'draw an image of', 'draw image', 'draw an image', 'draw',
+    'génère une image de', 'génère image de', 'génère une image', 'génère image', 'génère',
+    'crée une image de', 'crée image de', 'crée une image', 'crée image', 'crée',
+    'dessine une image de', 'dessine image de', 'dessine une image', 'dessine image', 'dessine',
+];
+
 const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
@@ -38,8 +43,6 @@ const authenticate = (req, res, next) => {
 };
 
 app.use('/v1', authenticate);
-
-// --- API ENDPOINTS ---
 
 app.get('/v1/models', async (req, res) => {
   try {
@@ -77,7 +80,6 @@ app.post('/v1/chat/completions', async (req, res) => {
     let ask = '';
     let imageUrl = null;
 
-    // 1. Extract text and image_url from the incoming message
     if (typeof userMessage.content === 'string') {
       ask = userMessage.content;
     } else if (Array.isArray(userMessage.content)) {
@@ -88,61 +90,80 @@ app.post('/v1/chat/completions', async (req, res) => {
         imageUrl = imagePart.image_url.url;
       }
     }
-    
-    // 2. If an image is present, process it
+
+    const uid = user || `anonymous-user-${Date.now()}`;
+    const lowerCaseAsk = ask.toLowerCase().trim();
+    const triggerKeyword = imageGenerationKeywords.find(keyword => lowerCaseAsk.startsWith(keyword));
+
+    if (triggerKeyword && !imageUrl) {
+      const prompt = ask.substring(triggerKeyword.length).trim();
+      console.log(`Image generation triggered for user ${uid} with prompt: "${prompt}"`);
+
+      const fluxResponse = await axios.get('https://haji-mix-api.gleeze.com/api/flux', {
+        params: { prompt, api_key: HAJI_API_KEY, uid },
+        responseType: 'arraybuffer',
+      });
+
+      const base64Data = Buffer.from(fluxResponse.data, 'binary').toString('base64');
+      const form = new FormData();
+      form.append('image', base64Data);
+      const imgbbResponse = await axios.post(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, form, {
+        headers: form.getHeaders(),
+      });
+
+      if (!imgbbResponse.data || !imgbbResponse.data.success) {
+        throw new Error('Failed to upload generated image to ImgBB.');
+      }
+      const generatedImageUrl = imgbbResponse.data.data.url;
+      console.log(`Generated image URL: ${generatedImageUrl}`);
+
+      const responseContent = `![Generated Image](${generatedImageUrl})`;
+      const completionId = `chatcmpl-gen-${Date.now()}`;
+
+      if (stream) {
+        const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
+        res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
+        const contentChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: { content: responseContent }, finish_reason: null }] };
+        res.write(`data: ${JSON.stringify(contentChunk)}\n\n`);
+        const stopChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
+        res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+      } else {
+        res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, message: { role: 'assistant', content: responseContent }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
+      }
+      return;
+    }
+
     let finalImageUrl = null;
     if (imageUrl) {
       if (imageUrl.startsWith('data:image')) {
-        // This is Base64 data, so we upload it to ImgBB
         console.log('Detected Base64 image data. Uploading to ImgBB...');
         if (!IMGBB_API_KEY) {
           throw new Error('IMGBB_API_KEY is not set in .env file. Cannot upload image.');
         }
-        
         const base64Data = imageUrl.replace(/^data:image\/[a-z]+;base64,/, "");
         const form = new FormData();
         form.append('image', base64Data);
-        
-        const imgbbResponse = await axios.post(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, form, {
-          headers: form.getHeaders(),
-        });
-        
+        const imgbbResponse = await axios.post(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders() });
         if (imgbbResponse.data && imgbbResponse.data.success) {
           finalImageUrl = imgbbResponse.data.data.url;
-          console.log(`Image uploaded successfully. URL: ${finalImageUrl}`);
         } else {
-          console.error('ImgBB upload failed:', imgbbResponse.data);
           throw new Error('Failed to upload image to ImgBB.');
         }
       } else {
-        // This is a standard URL, so we can use it directly
         finalImageUrl = imageUrl;
       }
     }
 
-    // 3. Prepare and call the haji-mix-api with a dynamic user ID
-    const uid = user || `anonymous-user-${Date.now()}`;
-    const apiParams = {
-      ask: ask,
-      model: model,
-      api_key: HAJI_API_KEY,
-      uid: uid // Using dynamic UID
-    };
+    const apiParams = { ask, model, api_key: HAJI_API_KEY, uid };
+    if (finalImageUrl) apiParams.img_url = finalImageUrl;
 
-    if (finalImageUrl) {
-      apiParams.img_url = finalImageUrl;
-    }
-    
     console.log(`Calling haji-mix-api for user ${uid} with model ${model}...`);
-    const response = await axios.get(HAJI_API_URL, {
-      params: apiParams,
-      timeout: 120000 // 2 minutes timeout
-    });
+    const response = await axios.get(HAJI_API_URL, { params: apiParams, timeout: 120000 });
 
-    // 4. Format and send the response to the client
     const apiResponse = response.data;
     if (!apiResponse || !apiResponse.answer) {
-      console.error('Invalid response from haji-mix-api:', apiResponse);
       throw new Error('Received an invalid response from the external API.');
     }
 
@@ -151,35 +172,22 @@ app.post('/v1/chat/completions', async (req, res) => {
     const completionId = `chatcmpl-${Date.now()}`;
 
     if (stream) {
-      // Handle streaming response
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      
       const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
       res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
-
       const contentChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { content: answer }, finish_reason: null }] };
       res.write(`data: ${JSON.stringify(contentChunk)}\n\n`);
-
       const stopChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
       res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
-      
       res.write('data: [DONE]\n\n');
       res.end();
     } else {
-      // Handle non-streaming response
-      const openAIFormattedResponse = { id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }};
-      res.json(openAIFormattedResponse);
+      res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
     }
   } catch (error) {
     console.error('Error during chat completion:', error.message);
     if (error.response) {
       console.error('External API error details:', error.response.data);
-      return res.status(error.response.status).json({
-        error: 'An error occurred with the external API.',
-        details: error.response.data
-      });
+      return res.status(error.response.status).json({ error: 'An error occurred with the external API.', details: error.response.data });
     }
     res.status(500).json({ error: 'An internal server error occurred.' });
   }
@@ -187,75 +195,33 @@ app.post('/v1/chat/completions', async (req, res) => {
 
 app.post('/v1/images/generations', async (req, res) => {
   const { prompt, user } = req.body;
-
   if (!prompt) {
     return res.status(400).json({ error: 'Prompt is missing.' });
   }
-
   const uid = user || `anonymous-user-${Date.now()}`;
-  console.log(`Received image generation request for user ${uid} with prompt: "${prompt}"`);
-
   try {
-    // 1. Call the Flux API to get the raw image data
-    console.log('Calling Flux API to generate image...');
     const fluxResponse = await axios.get('https://haji-mix-api.gleeze.com/api/flux', {
-      params: {
-        prompt: prompt,
-        api_key: HAJI_API_KEY,
-        uid: uid
-      },
-      responseType: 'arraybuffer' // Receive the response as binary data
+      params: { prompt, api_key: HAJI_API_KEY, uid },
+      responseType: 'arraybuffer'
     });
-
-    const rawImageData = fluxResponse.data;
-    console.log('Successfully received raw image data from Flux API.');
-
-    // 2. Upload the raw image data to ImgBB
-    console.log('Uploading generated image to ImgBB...');
-    if (!IMGBB_API_KEY) {
-      throw new Error('IMGBB_API_KEY is not set. Cannot upload generated image.');
-    }
-
-    const base64Data = Buffer.from(rawImageData, 'binary').toString('base64');
+    const base64Data = Buffer.from(fluxResponse.data, 'binary').toString('base64');
     const form = new FormData();
     form.append('image', base64Data);
-
-    const imgbbResponse = await axios.post(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, form, {
-      headers: form.getHeaders(),
-    });
-
+    const imgbbResponse = await axios.post(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders() });
     if (!imgbbResponse.data || !imgbbResponse.data.success) {
-      console.error('ImgBB upload failed:', imgbbResponse.data);
       throw new Error('Failed to upload generated image to ImgBB.');
     }
-    
     const finalImageUrl = imgbbResponse.data.data.url;
-    console.log(`Generated image uploaded successfully. URL: ${finalImageUrl}`);
-
-    // 3. Send the OpenAI-formatted response back to the client
-    res.json({
-      created: Math.floor(Date.now() / 1000),
-      data: [
-        {
-          url: finalImageUrl,
-        },
-      ],
-    });
-
+    res.json({ created: Math.floor(Date.now() / 1000), data: [{ url: finalImageUrl }] });
   } catch (error) {
     console.error('Error during image generation:', error.message);
     if (error.response) {
-      console.error('External API error details:', error.response.data);
-      return res.status(error.response.status).json({
-        error: 'An error occurred with the external image generation API.',
-        details: error.response.data
-      });
+      return res.status(error.response.status).json({ error: 'An error occurred with the external image generation API.', details: error.response.data });
     }
     res.status(500).json({ error: 'An internal server error occurred during image generation.' });
   }
 });
 
-// --- SERVER START ---
 app.listen(PORT, () => {
   console.log(`OpenAI-compatible proxy server is running on http://localhost:${PORT}`);
   if (!HAJI_API_KEY || !MY_SERVER_API_KEY) {
