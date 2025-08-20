@@ -1,7 +1,7 @@
 {
-  "name": "haji-mix-api-proxy",
+  "name": "rtm_aiproxy",
   "version": "1.0.0",
-  "description": "A proxy server to make haji-mix-api compatible with OpenAI API format.",
+  "description": "A proxy server to make rtm compatible with OpenAI API format.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
