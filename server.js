@@ -15,11 +15,15 @@ app.use((req, res, next) => {
   next();
 });
 
+// --- CONFIGURATION ---
 const PORT = process.env.PORT || 3000;
-const HAJI_API_URL = 'https://haji-mix-api.gleeze.com/api/anthropic';
+// API Keys
 const HAJI_API_KEY = process.env.HAJI_API_KEY;
 const MY_SERVER_API_KEY = process.env.MY_SERVER_API_KEY;
 const IMGBB_API_KEY = process.env.IMGBB_API_KEY;
+// API URLs from .env for security
+
+const IMGBB_UPLOAD_URL = process.env.IMGBB_UPLOAD_URL || 'https://api.imgbb.com/1/upload';
 
 const imageGenerationKeywords = [
     'generate image of', 'generate an image of', 'generate image', 'generate an image', 'generate',
@@ -46,7 +50,7 @@ app.use('/v1', authenticate);
 
 app.get('/v1/models', async (req, res) => {
   try {
-    const response = await axios.get(HAJI_API_URL, {
+    const response = await axios.get(HAJI_ANTHROPIC_URL, {
       params: { ask: 'hello', model: 'claude-3-opus-20240229', api_key: HAJI_API_KEY, uid: '1' },
     });
     const supportedModels = response.data.supported_models;
@@ -93,13 +97,13 @@ app.post('/v1/chat/completions', async (req, res) => {
 
     const uid = user || `anonymous-user-${Date.now()}`;
     const lowerCaseAsk = ask.toLowerCase().trim();
-    const triggerKeyword = imageGenerationKeywords.find(keyword => lowerCaseAsk.startsWith(keyword));
+    const triggerKeyword = imageGenerationKeywords.find(keyword => lowerCaseAsk === keyword || lowerCaseAsk.startsWith(keyword + ' '));
 
     if (triggerKeyword && !imageUrl) {
       const prompt = ask.substring(triggerKeyword.length).trim();
       console.log(`Image generation triggered for user ${uid} with prompt: "${prompt}"`);
 
-      const fluxResponse = await axios.get('https://haji-mix-api.gleeze.com/api/flux', {
+      const fluxResponse = await axios.get(HAJI_FLUX_URL, {
         params: { prompt, api_key: HAJI_API_KEY, uid },
         responseType: 'arraybuffer',
       });
@@ -107,7 +111,7 @@ app.post('/v1/chat/completions', async (req, res) => {
       const base64Data = Buffer.from(fluxResponse.data, 'binary').toString('base64');
       const form = new FormData();
       form.append('image', base64Data);
-      const imgbbResponse = await axios.post(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, form, {
+      const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, {
         headers: form.getHeaders(),
       });
 
@@ -115,8 +119,6 @@ app.post('/v1/chat/completions', async (req, res) => {
         throw new Error('Failed to upload generated image to ImgBB.');
       }
       const generatedImageUrl = imgbbResponse.data.data.url;
-      console.log(`Generated image URL: ${generatedImageUrl}`);
-
       const responseContent = `![Generated Image](${generatedImageUrl})`;
       const completionId = `chatcmpl-gen-${Date.now()}`;
 
@@ -138,14 +140,10 @@ app.post('/v1/chat/completions', async (req, res) => {
     let finalImageUrl = null;
     if (imageUrl) {
       if (imageUrl.startsWith('data:image')) {
-        console.log('Detected Base64 image data. Uploading to ImgBB...');
-        if (!IMGBB_API_KEY) {
-          throw new Error('IMGBB_API_KEY is not set in .env file. Cannot upload image.');
-        }
         const base64Data = imageUrl.replace(/^data:image\/[a-z]+;base64,/, "");
         const form = new FormData();
         form.append('image', base64Data);
-        const imgbbResponse = await axios.post(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders() });
+        const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders() });
         if (imgbbResponse.data && imgbbResponse.data.success) {
           finalImageUrl = imgbbResponse.data.data.url;
         } else {
@@ -159,9 +157,7 @@ app.post('/v1/chat/completions', async (req, res) => {
     const apiParams = { ask, model, api_key: HAJI_API_KEY, uid };
     if (finalImageUrl) apiParams.img_url = finalImageUrl;
 
-    console.log(`Calling haji-mix-api for user ${uid} with model ${model}...`);
-    const response = await axios.get(HAJI_API_URL, { params: apiParams, timeout: 120000 });
-
+    const response = await axios.get(HAJI_ANTHROPIC_URL, { params: apiParams, timeout: 120000 });
     const apiResponse = response.data;
     if (!apiResponse || !apiResponse.answer) {
       throw new Error('Received an invalid response from the external API.');
@@ -186,7 +182,6 @@ app.post('/v1/chat/completions', async (req, res) => {
   } catch (error) {
     console.error('Error during chat completion:', error.message);
     if (error.response) {
-      console.error('External API error details:', error.response.data);
       return res.status(error.response.status).json({ error: 'An error occurred with the external API.', details: error.response.data });
     }
     res.status(500).json({ error: 'An internal server error occurred.' });
@@ -200,14 +195,14 @@ app.post('/v1/images/generations', async (req, res) => {
   }
   const uid = user || `anonymous-user-${Date.now()}`;
   try {
-    const fluxResponse = await axios.get('https://haji-mix-api.gleeze.com/api/flux', {
+    const fluxResponse = await axios.get(HAJI_FLUX_URL, {
       params: { prompt, api_key: HAJI_API_KEY, uid },
       responseType: 'arraybuffer'
     });
     const base64Data = Buffer.from(fluxResponse.data, 'binary').toString('base64');
     const form = new FormData();
     form.append('image', base64Data);
-    const imgbbResponse = await axios.post(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders() });
+    const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders() });
     if (!imgbbResponse.data || !imgbbResponse.data.success) {
       throw new Error('Failed to upload generated image to ImgBB.');
     }
@@ -224,10 +219,7 @@ app.post('/v1/images/generations', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`OpenAI-compatible proxy server is running on http://localhost:${PORT}`);
-  if (!HAJI_API_KEY || !MY_SERVER_API_KEY) {
-    console.warn('Warning: HAJI_API_KEY or MY_SERVER_API_KEY are not set. Please check your .env file.');
-  }
-  if (!IMGBB_API_KEY) {
-    console.warn('Warning: IMGBB_API_KEY is not set. Image uploads will fail.');
+  if (!HAJI_API_KEY || !MY_SERVER_API_KEY || !IMGBB_API_KEY) {
+    console.warn('Warning: One or more API keys (HAJI_API_KEY, MY_SERVER_API_KEY, IMGBB_API_KEY) are not set in .env file.');
   }
 });
