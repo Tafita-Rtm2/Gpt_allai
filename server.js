@@ -71,15 +71,38 @@ app.post('/v1/chat/completions', async (req, res) => {
   }
 
   try {
+    let ask = '';
+    let imageUrl = null;
+
+    if (typeof userMessage.content === 'string') {
+      ask = userMessage.content;
+    } else if (Array.isArray(userMessage.content)) {
+      const textPart = userMessage.content.find(part => part.type === 'text');
+      const imagePart = userMessage.content.find(part => part.type === 'image_url');
+      if (textPart) {
+        ask = textPart.text;
+      }
+      if (imagePart && imagePart.image_url && imagePart.image_url.url) {
+        imageUrl = imagePart.image_url.url;
+      }
+    }
+
+    const apiParams = {
+      ask: ask,
+      model: model,
+      api_key: HAJI_API_KEY,
+      uid: '3' // Use a different UID for image requests for easier logging
+    };
+
+    if (imageUrl) {
+      apiParams.img_url = imageUrl;
+      console.log(`Sending image URL to external API: ${imageUrl}`);
+    }
+    
     console.log(`Attempting to call external API for model ${model}...`);
     const response = await axios.get(HAJI_API_URL, {
-      params: {
-        ask: userMessage.content,
-        model: model,
-        api_key: HAJI_API_KEY,
-        uid: '2' // uid is a mandatory parameter for the haji-mix-api
-      },
-      timeout: 30000 // 30 seconds timeout
+      params: apiParams,
+      timeout: 120000 // Increased timeout to 2 minutes
     });
 
     console.log('External API call successful.');
