@@ -61,7 +61,7 @@ app.get('/v1/models', async (req, res) => {
 });
 
 app.post('/v1/chat/completions', async (req, res) => {
-  const { model, messages } = req.body;
+  const { model, messages, stream } = req.body;
   if (!messages || messages.length === 0) {
     return res.status(400).json({ error: 'Invalid messages array.' });
   }
@@ -77,35 +77,77 @@ app.post('/v1/chat/completions', async (req, res) => {
         ask: userMessage.content,
         model: model,
         api_key: HAJI_API_KEY,
-        uid: '2' // *** FIX: Added the mandatory uid parameter ***
+        uid: '2' // uid is a mandatory parameter for the haji-mix-api
       },
-      timeout: 30000 // Increased timeout to 30 seconds
+      timeout: 30000 // 30 seconds timeout
     });
 
     console.log('External API call successful.');
-    console.log('Received data:', JSON.stringify(response.data, null, 2));
-
     const apiResponse = response.data;
 
-    // Check for a valid answer from the API
     if (!apiResponse || !apiResponse.answer) {
       console.error('Invalid response structure from external API:', apiResponse);
       return res.status(500).json({ error: 'Received an invalid response from the external API.' });
     }
 
-    const openAIFormattedResponse = {
-      id: `chatcmpl-${Date.now()}`,
-      object: 'chat.completion',
-      created: Math.floor(Date.now() / 1000),
-      model: apiResponse.model_used,
-      choices: [{
-        index: 0,
-        message: { role: 'assistant', content: apiResponse.answer },
-        finish_reason: 'stop',
-      }],
-      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-    };
-    res.json(openAIFormattedResponse);
+    const modelUsed = apiResponse.model_used || model;
+    const answer = apiResponse.answer;
+    const completionId = `chatcmpl-${Date.now()}`;
+
+    if (stream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
+      // Send a chunk for the role
+      const roleChunk = {
+        id: completionId,
+        object: 'chat.completion.chunk',
+        created: Math.floor(Date.now() / 1000),
+        model: modelUsed,
+        choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }],
+      };
+      res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
+
+      // Send a chunk for the content
+      const contentChunk = {
+        id: completionId,
+        object: 'chat.completion.chunk',
+        created: Math.floor(Date.now() / 1000),
+        model: modelUsed,
+        choices: [{ index: 0, delta: { content: answer }, finish_reason: null }],
+      };
+      res.write(`data: ${JSON.stringify(contentChunk)}\n\n`);
+
+      // Send the final chunk with the stop reason
+      const stopChunk = {
+        id: completionId,
+        object: 'chat.completion.chunk',
+        created: Math.floor(Date.now() / 1000),
+        model: modelUsed,
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      };
+      res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
+      
+      // End the stream
+      res.write('data: [DONE]\n\n');
+      res.end();
+    } else {
+      // Non-streaming response
+      const openAIFormattedResponse = {
+        id: completionId,
+        object: 'chat.completion',
+        created: Math.floor(Date.now() / 1000),
+        model: modelUsed,
+        choices: [{
+          index: 0,
+          message: { role: 'assistant', content: answer },
+          finish_reason: 'stop',
+        }],
+        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+      };
+      res.json(openAIFormattedResponse);
+    }
   } catch (error) {
     console.error('Error during chat completion:', error.message);
     if (error.response) {
