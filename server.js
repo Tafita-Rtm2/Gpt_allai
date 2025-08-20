@@ -64,7 +64,7 @@ app.get('/v1/models', async (req, res) => {
 });
 
 app.post('/v1/chat/completions', async (req, res) => {
-  const { model, messages, stream } = req.body;
+  const { model, messages, stream, user } = req.body;
   if (!messages || messages.length === 0) {
     return res.status(400).json({ error: 'Invalid messages array.' });
   }
@@ -120,19 +120,20 @@ app.post('/v1/chat/completions', async (req, res) => {
       }
     }
 
-    // 3. Prepare and call the haji-mix-api
+    // 3. Prepare and call the haji-mix-api with a dynamic user ID
+    const uid = user || `anonymous-user-${Date.now()}`;
     const apiParams = {
       ask: ask,
       model: model,
       api_key: HAJI_API_KEY,
-      uid: '5' // Changed UID for easier log tracking
+      uid: uid // Using dynamic UID
     };
 
     if (finalImageUrl) {
       apiParams.img_url = finalImageUrl;
     }
     
-    console.log(`Calling haji-mix-api with model ${model}...`);
+    console.log(`Calling haji-mix-api for user ${uid} with model ${model}...`);
     const response = await axios.get(HAJI_API_URL, {
       params: apiParams,
       timeout: 120000 // 2 minutes timeout
@@ -181,6 +182,76 @@ app.post('/v1/chat/completions', async (req, res) => {
       });
     }
     res.status(500).json({ error: 'An internal server error occurred.' });
+  }
+});
+
+app.post('/v1/images/generations', async (req, res) => {
+  const { prompt, user } = req.body;
+
+  if (!prompt) {
+    return res.status(400).json({ error: 'Prompt is missing.' });
+  }
+
+  const uid = user || `anonymous-user-${Date.now()}`;
+  console.log(`Received image generation request for user ${uid} with prompt: "${prompt}"`);
+
+  try {
+    // 1. Call the Flux API to get the raw image data
+    console.log('Calling Flux API to generate image...');
+    const fluxResponse = await axios.get('https://haji-mix-api.gleeze.com/api/flux', {
+      params: {
+        prompt: prompt,
+        api_key: HAJI_API_KEY,
+        uid: uid
+      },
+      responseType: 'arraybuffer' // Receive the response as binary data
+    });
+
+    const rawImageData = fluxResponse.data;
+    console.log('Successfully received raw image data from Flux API.');
+
+    // 2. Upload the raw image data to ImgBB
+    console.log('Uploading generated image to ImgBB...');
+    if (!IMGBB_API_KEY) {
+      throw new Error('IMGBB_API_KEY is not set. Cannot upload generated image.');
+    }
+
+    const base64Data = Buffer.from(rawImageData, 'binary').toString('base64');
+    const form = new FormData();
+    form.append('image', base64Data);
+
+    const imgbbResponse = await axios.post(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, form, {
+      headers: form.getHeaders(),
+    });
+
+    if (!imgbbResponse.data || !imgbbResponse.data.success) {
+      console.error('ImgBB upload failed:', imgbbResponse.data);
+      throw new Error('Failed to upload generated image to ImgBB.');
+    }
+    
+    const finalImageUrl = imgbbResponse.data.data.url;
+    console.log(`Generated image uploaded successfully. URL: ${finalImageUrl}`);
+
+    // 3. Send the OpenAI-formatted response back to the client
+    res.json({
+      created: Math.floor(Date.now() / 1000),
+      data: [
+        {
+          url: finalImageUrl,
+        },
+      ],
+    });
+
+  } catch (error) {
+    console.error('Error during image generation:', error.message);
+    if (error.response) {
+      console.error('External API error details:', error.response.data);
+      return res.status(error.response.status).json({
+        error: 'An error occurred with the external image generation API.',
+        details: error.response.data
+      });
+    }
+    res.status(500).json({ error: 'An internal server error occurred during image generation.' });
   }
 });
 
