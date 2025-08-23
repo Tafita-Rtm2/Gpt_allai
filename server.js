@@ -168,10 +168,6 @@ app.post('/v1/chat/completions', async (req, res) => {
             model: gptModel,
             api_key: HAJI_API_KEY,
             uid,
-            reasoning_effort: 'high',
-            stream: false, // Always call the backend without streaming
-            roleplay: '',
-            max_tokens: '',
         };
 
         const response = await axios.get(HAJI_GPTOSS_URL, { params: apiParams, timeout: 120000 });
