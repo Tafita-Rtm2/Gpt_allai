@@ -134,9 +134,38 @@ app.post('/v1/chat/completions', async (req, res) => {
     const triggerKeyword = imageGenerationKeywords.find(keyword => lowerCaseAsk === keyword || lowerCaseAsk.startsWith(keyword + ' '));
 
     if (gpt5Models.includes(model)) {
+        // --- Start of GPT-5 Logic ---
         const gptModel = model === 'chatgpt-5-pro' ? 'gpt-oss-120b' : 'gpt-oss-20b';
+        let finalAsk = ask;
+
+        // Image analysis diversion logic (remains the same)
+        if (imageUrl) {
+            let finalImageUrl = null;
+            if (imageUrl.startsWith('data:image')) {
+                const base64Data = imageUrl.replace(/^data:image\/[a-z]+;base64,/, "");
+                const form = new FormData();
+                form.append('image', base64Data);
+                const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders() });
+                finalImageUrl = imgbbResponse.data && imgbbResponse.data.success ? imgbbResponse.data.data.url : null;
+            } else {
+                finalImageUrl = imageUrl;
+            }
+
+            if (!finalImageUrl) throw new Error('Failed to process and upload image for analysis.');
+
+            const claudeResponse = await axios.get(HAJI_ANTHROPIC_URL, {
+                params: { ask: "Analyze this image and describe it in detail.", model: 'claude-3-haiku-20240307', api_key: HAJI_API_KEY, uid, img_url: finalImageUrl },
+                timeout: 120000
+            });
+
+            if (!claudeResponse.data || !claudeResponse.data.answer) throw new Error('Failed to get image description from Claude API.');
+
+            const imageDescription = claudeResponse.data.answer;
+            finalAsk = `The user provided an image with the following description: "${imageDescription}". The user's prompt is: "${ask}". Please respond to the user's prompt based on the image description.`;
+        }
+
         const apiParams = {
-            ask,
+            ask: finalAsk,
             model: gptModel,
             api_key: HAJI_API_KEY,
             uid,
@@ -146,70 +175,36 @@ app.post('/v1/chat/completions', async (req, res) => {
             max_tokens: '',
         };
 
-        let finalAsk = ask;
-        if (imageUrl) {
-            let finalImageUrl = null;
-            if (imageUrl.startsWith('data:image')) {
-                const base64Data = imageUrl.replace(/^data:image\/[a-z]+;base64,/, "");
-                const form = new FormData();
-                form.append('image', base64Data);
-                const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders() });
-                if (imgbbResponse.data && imgbbResponse.data.success) {
-                    finalImageUrl = imgbbResponse.data.data.url;
-                } else {
-                    throw new Error('Failed to upload image to ImgBB for analysis.');
-                }
-            } else {
-                finalImageUrl = imageUrl;
-            }
-
-            if (finalImageUrl) {
-                const claudeResponse = await axios.get(HAJI_ANTHROPIC_URL, {
-                    params: {
-                        ask: "Analyze this image and describe it in detail.",
-                        model: 'claude-3-haiku-20240307', // Use a fast model for analysis
-                        api_key: HAJI_API_KEY,
-                        uid,
-                        img_url: finalImageUrl
-                    },
-                    timeout: 120000
-                });
-
-                if (!claudeResponse.data || !claudeResponse.data.answer) {
-                    throw new Error('Failed to get image description from Claude API.');
-                }
-                const imageDescription = claudeResponse.data.answer;
-                finalAsk = `The user provided an image with the following description: "${imageDescription}". The user's prompt is: "${ask}". Please respond to the user's prompt based on the image description.`;
-            }
-        }
-        apiParams.ask = finalAsk;
-
-        const response = await axios.get(HAJI_GPTOSS_URL, { params: apiParams, timeout: 120000 });
-        const apiResponse = response.data;
-
-        if (!apiResponse || !apiResponse.answer) {
-            console.error('Invalid response from GPT-5 API. Full response:', JSON.stringify(apiResponse, null, 2));
-            throw new Error('Received an invalid response from the external GPT-5 API.');
-        }
-
-        const modelUsed = apiResponse.model_used || model;
-        const answer = apiResponse.answer;
-        const completionId = `chatcmpl-${Date.now()}`;
-
         if (stream) {
+            // Proper stream proxying
             res.setHeader('Content-Type', 'text/event-stream');
-            const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
-            res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
-            const contentChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { content: answer }, finish_reason: null }] };
-            res.write(`data: ${JSON.stringify(contentChunk)}\n\n`);
-            const stopChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
-            res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
-            res.write('data: [DONE]\n\n');
-            res.end();
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('Connection', 'keep-alive');
+
+            const backendResponse = await axios.get(HAJI_GPTOSS_URL, {
+                params: apiParams,
+                responseType: 'stream'
+            });
+
+            backendResponse.data.pipe(res);
+
         } else {
+            // Non-streaming logic
+            const response = await axios.get(HAJI_GPTOSS_URL, { params: apiParams, timeout: 120000 });
+            const apiResponse = response.data;
+
+            if (!apiResponse || !apiResponse.answer) {
+                console.error('Invalid non-stream response from GPT-5 API:', apiResponse);
+                throw new Error('Received an invalid non-stream response from the external GPT-5 API.');
+            }
+
+            const modelUsed = apiResponse.model_used || model;
+            const answer = apiResponse.answer;
+            const completionId = `chatcmpl-${Date.now()}`;
             res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
         }
         return;
+        // --- End of GPT-5 Logic ---
     }
 
     if (triggerKeyword && !imageUrl) {
@@ -264,30 +259,33 @@ app.post('/v1/chat/completions', async (req, res) => {
       }
     }
 
-    const apiParams = { ask, model, api_key: HAJI_API_KEY, uid };
+    const apiParams = { ask, model, api_key: HAJI_API_KEY, uid, stream };
     if (finalImageUrl) apiParams.img_url = finalImageUrl;
 
-    const response = await axios.get(HAJI_ANTHROPIC_URL, { params: apiParams, timeout: 120000 });
-    const apiResponse = response.data;
-    if (!apiResponse || !apiResponse.answer) {
-      throw new Error('Received an invalid response from the external API.');
-    }
-
-    const modelUsed = apiResponse.model_used || model;
-    const answer = apiResponse.answer;
-    const completionId = `chatcmpl-${Date.now()}`;
-
     if (stream) {
-      const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
-      res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
-      const contentChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { content: answer }, finish_reason: null }] };
-      res.write(`data: ${JSON.stringify(contentChunk)}\n\n`);
-      const stopChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
-      res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
-      res.write('data: [DONE]\n\n');
-      res.end();
+        // Proper stream proxying for Claude models
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+
+        const backendResponse = await axios.get(HAJI_ANTHROPIC_URL, {
+            params: apiParams,
+            responseType: 'stream'
+        });
+
+        backendResponse.data.pipe(res);
     } else {
-      res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
+        // Non-streaming logic for Claude models
+        const response = await axios.get(HAJI_ANTHROPIC_URL, { params: apiParams, timeout: 120000 });
+        const apiResponse = response.data;
+        if (!apiResponse || !apiResponse.answer) {
+          throw new Error('Received an invalid response from the external API.');
+        }
+
+        const modelUsed = apiResponse.model_used || model;
+        const answer = apiResponse.answer;
+        const completionId = `chatcmpl-${Date.now()}`;
+        res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
     }
   } catch (error) {
     console.error('Error during chat completion:', error.message);
