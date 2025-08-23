@@ -48,6 +48,11 @@ header h1 {
     background-color: #155ab6;
 }
 
+#start-button:disabled {
+    background-color: #9abfff;
+    cursor: not-allowed;
+}
+
 .hidden {
     display: none;
 }

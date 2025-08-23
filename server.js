@@ -5,13 +5,11 @@ const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
 const FormData = require('form-data');
-const crypto = require('crypto');
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(cors());
 app.use(express.static('public'));
-
 
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] Received ${req.method} request for ${req.url}`);
@@ -22,13 +20,21 @@ app.use((req, res, next) => {
 const PORT = process.env.PORT || 3000;
 // API Keys
 const HAJI_API_KEY = process.env.HAJI_API_KEY;
-const MY_SERVER_API_KEY = process.env.MY_SERVER_API_KEY;
 const IMGBB_API_KEY = process.env.IMGBB_API_KEY;
+const VALID_API_KEYS = (process.env.VALID_API_KEYS || '').split(',').filter(Boolean);
+if (VALID_API_KEYS.length === 0) {
+    console.warn('Warning: No VALID_API_KEYS found in .env. All API requests will be rejected.');
+}
 // API URLs from .env for security. No fallbacks for better security.
 const HAJI_ANTHROPIC_URL = process.env.HAJI_ANTHROPIC_URL;
 const HAJI_FLUX_URL = process.env.HAJI_FLUX_URL;
 const HAJI_GPTOSS_URL = process.env.HAJI_GPTOSS_URL;
 const IMGBB_UPLOAD_URL = process.env.IMGBB_UPLOAD_URL;
+
+// Create a pool of available keys to be dispensed.
+// This is a copy of the original list. As keys are dispensed, they are removed from this pool.
+// Note: This pool will reset every time the server restarts.
+let availableKeys = [...VALID_API_KEYS];
 
 const imageGenerationKeywords = [
     'generate image of', 'generate an image of', 'generate image', 'generate an image', 'generate',
@@ -45,24 +51,21 @@ const authenticate = (req, res, next) => {
     return res.status(401).json({ error: 'Authorization header is missing' });
   }
   const token = authHeader.split(' ')[1];
-  if (token !== MY_SERVER_API_KEY) {
+  if (!VALID_API_KEYS.includes(token)) {
     return res.status(403).json({ error: 'Invalid API key' });
   }
   next();
 };
 
-// Endpoint to generate a new API key.
-// Note: This is a stateless generator. It creates a secure, random key but does not store it.
-// A real-world application would need a database to store and validate these keys.
+// Endpoint to dispense an API key from the pool.
 app.post('/api/generate-key', (req, res) => {
-    try {
-        // This generates a 32-byte random string and encodes it in hex, resulting in a 64-character key.
-        const newApiKey = crypto.randomBytes(32).toString('hex');
-        res.json({ apiKey: newApiKey });
-    } catch (error) {
-        console.error('Error generating API key:', error);
-        res.status(500).json({ error: 'Failed to generate API key.' });
+    if (availableKeys.length === 0) {
+        return res.status(503).json({ error: 'No more API keys are available at this time.' });
     }
+    // Get the last key from the array.
+    const keyToDispense = availableKeys.pop();
+    console.log(`Dispensed key. Keys remaining: ${availableKeys.length}`);
+    res.json({ apiKey: keyToDispense });
 });
 
 app.use('/v1', authenticate);
@@ -76,12 +79,23 @@ app.get('/v1/models', async (req, res) => {
     if (!supportedModels || !Array.isArray(supportedModels)) {
       throw new Error('Could not retrieve supported models.');
     }
-    const modelsData = supportedModels.map(modelId => ({
+    let modelsData = supportedModels.map(modelId => ({
       id: modelId,
       object: 'model',
       created: Math.floor(Date.now() / 1000),
       owned_by: 'rtm-mix-api',
     }));
+
+    // Add the hardcoded GPT-5 models to the list
+    const gpt5ModelsToAdd = gpt5Models.map(modelId => ({
+        id: modelId,
+        object: 'model',
+        created: Math.floor(Date.now() / 1000),
+        owned_by: 'rtm-mix-api',
+    }));
+
+    modelsData = modelsData.concat(gpt5ModelsToAdd);
+
     res.json({ object: 'list', data: modelsData });
   } catch (error) {
     console.error('Error fetching models:', error.message);
@@ -314,7 +328,7 @@ app.listen(PORT, () => {
   console.log(`OpenAI-compatible proxy server is running on http://localhost:${PORT}`);
   
   const requiredVars = [
-    'HAJI_API_KEY', 'MY_SERVER_API_KEY', 'IMGBB_API_KEY',
+    'HAJI_API_KEY', 'IMGBB_API_KEY', 'VALID_API_KEYS',
     'HAJI_ANTHROPIC_URL', 'HAJI_FLUX_URL', 'IMGBB_UPLOAD_URL', 'HAJI_GPTOSS_URL'
   ];
   const missingVars = requiredVars.filter(v => !process.env[v]);

@@ -7,7 +7,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     startButton.addEventListener('click', async () => {
         try {
-            // Show loading state if needed
             startButton.textContent = 'Generating...';
             startButton.disabled = true;
 
@@ -15,11 +14,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 method: 'POST',
             });
 
-            if (!response.ok) {
-                throw new Error('Failed to generate API key.');
-            }
-
             const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to generate API key.');
+            }
 
             if (data.apiKey) {
                 apiKeyCode.textContent = data.apiKey;
@@ -29,8 +28,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (error) {
             console.error('Error generating API key:', error);
-            alert('Could not generate an API key. Please try again later.');
-            startButton.textContent = 'Get Started';
+            alert(`Could not generate an API key: ${error.message}`);
+            startButton.textContent = 'Get Your API Key';
             startButton.disabled = false;
         }
     });
