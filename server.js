@@ -5,10 +5,13 @@ const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
 const FormData = require('form-data');
+const crypto = require('crypto');
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(cors());
+app.use(express.static('public'));
+
 
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] Received ${req.method} request for ${req.url}`);
@@ -24,6 +27,7 @@ const IMGBB_API_KEY = process.env.IMGBB_API_KEY;
 // API URLs from .env for security. No fallbacks for better security.
 const HAJI_ANTHROPIC_URL = process.env.HAJI_ANTHROPIC_URL;
 const HAJI_FLUX_URL = process.env.HAJI_FLUX_URL;
+const HAJI_GPTOSS_URL = process.env.HAJI_GPTOSS_URL;
 const IMGBB_UPLOAD_URL = process.env.IMGBB_UPLOAD_URL;
 
 const imageGenerationKeywords = [
@@ -47,6 +51,20 @@ const authenticate = (req, res, next) => {
   next();
 };
 
+// Endpoint to generate a new API key.
+// Note: This is a stateless generator. It creates a secure, random key but does not store it.
+// A real-world application would need a database to store and validate these keys.
+app.post('/api/generate-key', (req, res) => {
+    try {
+        // This generates a 32-byte random string and encodes it in hex, resulting in a 64-character key.
+        const newApiKey = crypto.randomBytes(32).toString('hex');
+        res.json({ apiKey: newApiKey });
+    } catch (error) {
+        console.error('Error generating API key:', error);
+        res.status(500).json({ error: 'Failed to generate API key.' });
+    }
+});
+
 app.use('/v1', authenticate);
 
 app.get('/v1/models', async (req, res) => {
@@ -62,7 +80,7 @@ app.get('/v1/models', async (req, res) => {
       id: modelId,
       object: 'model',
       created: Math.floor(Date.now() / 1000),
-      owned_by: 'haji-mix-api',
+      owned_by: 'rtm-mix-api',
     }));
     res.json({ object: 'list', data: modelsData });
   } catch (error) {
@@ -70,6 +88,8 @@ app.get('/v1/models', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch models.' });
   }
 });
+const gpt5Models = ['chatgpt-5', 'chatgpt-5-pro'];
+
 app.post('/v1/chat/completions', async (req, res) => {
   const { model, messages, stream, user } = req.body;
   if (!messages || messages.length === 0) {
@@ -98,6 +118,82 @@ app.post('/v1/chat/completions', async (req, res) => {
     const uid = user || `anonymous-user-${Date.now()}`;
     const lowerCaseAsk = ask.toLowerCase().trim();
     const triggerKeyword = imageGenerationKeywords.find(keyword => lowerCaseAsk === keyword || lowerCaseAsk.startsWith(keyword + ' '));
+
+    if (gpt5Models.includes(model)) {
+        const gptModel = model === 'chatgpt-5-pro' ? 'gpt-oss-120b' : 'gpt-oss-20b';
+        const apiParams = {
+            ask,
+            model: gptModel,
+            api_key: HAJI_API_KEY,
+            uid,
+            reasoning_effort: 'high',
+            stream: stream,
+        };
+
+        let finalAsk = ask;
+        if (imageUrl) {
+            let finalImageUrl = null;
+            if (imageUrl.startsWith('data:image')) {
+                const base64Data = imageUrl.replace(/^data:image\/[a-z]+;base64,/, "");
+                const form = new FormData();
+                form.append('image', base64Data);
+                const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders() });
+                if (imgbbResponse.data && imgbbResponse.data.success) {
+                    finalImageUrl = imgbbResponse.data.data.url;
+                } else {
+                    throw new Error('Failed to upload image to ImgBB for analysis.');
+                }
+            } else {
+                finalImageUrl = imageUrl;
+            }
+
+            if (finalImageUrl) {
+                const claudeResponse = await axios.get(HAJI_ANTHROPIC_URL, {
+                    params: {
+                        ask: "Analyze this image and describe it in detail.",
+                        model: 'claude-3-haiku-20240307', // Use a fast model for analysis
+                        api_key: HAJI_API_KEY,
+                        uid,
+                        img_url: finalImageUrl
+                    },
+                    timeout: 120000
+                });
+
+                if (!claudeResponse.data || !claudeResponse.data.answer) {
+                    throw new Error('Failed to get image description from Claude API.');
+                }
+                const imageDescription = claudeResponse.data.answer;
+                finalAsk = `The user provided an image with the following description: "${imageDescription}". The user's prompt is: "${ask}". Please respond to the user's prompt based on the image description.`;
+            }
+        }
+        apiParams.ask = finalAsk;
+
+        const response = await axios.get(HAJI_GPTOSS_URL, { params: apiParams, timeout: 120000 });
+        const apiResponse = response.data;
+
+        if (!apiResponse || !apiResponse.answer) {
+            throw new Error('Received an invalid response from the external GPT-5 API.');
+        }
+
+        const modelUsed = apiResponse.model_used || model;
+        const answer = apiResponse.answer;
+        const completionId = `chatcmpl-${Date.now()}`;
+
+        if (stream) {
+            res.setHeader('Content-Type', 'text/event-stream');
+            const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
+            res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
+            const contentChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { content: answer }, finish_reason: null }] };
+            res.write(`data: ${JSON.stringify(contentChunk)}\n\n`);
+            const stopChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
+            res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+        } else {
+            res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
+        }
+        return;
+    }
 
     if (triggerKeyword && !imageUrl) {
       const prompt = ask.substring(triggerKeyword.length).trim();
@@ -219,7 +315,7 @@ app.listen(PORT, () => {
   
   const requiredVars = [
     'HAJI_API_KEY', 'MY_SERVER_API_KEY', 'IMGBB_API_KEY',
-    'HAJI_ANTHROPIC_URL', 'HAJI_FLUX_URL', 'IMGBB_UPLOAD_URL'
+    'HAJI_ANTHROPIC_URL', 'HAJI_FLUX_URL', 'IMGBB_UPLOAD_URL', 'HAJI_GPTOSS_URL'
   ];
   const missingVars = requiredVars.filter(v => !process.env[v]);
 
