@@ -134,11 +134,10 @@ app.post('/v1/chat/completions', async (req, res) => {
     const triggerKeyword = imageGenerationKeywords.find(keyword => lowerCaseAsk === keyword || lowerCaseAsk.startsWith(keyword + ' '));
 
     if (gpt5Models.includes(model)) {
-        // --- Start of GPT-5 Logic ---
+        // --- Start of GPT-5 Logic (now mirrors Claude's logic) ---
         const gptModel = model === 'chatgpt-5-pro' ? 'gpt-oss-120b' : 'gpt-oss-20b';
         let finalAsk = ask;
 
-        // Image analysis diversion logic (remains the same)
         if (imageUrl) {
             let finalImageUrl = null;
             if (imageUrl.startsWith('data:image')) {
@@ -170,37 +169,35 @@ app.post('/v1/chat/completions', async (req, res) => {
             api_key: HAJI_API_KEY,
             uid,
             reasoning_effort: 'high',
-            stream: stream,
+            stream: false, // Always call the backend without streaming
             roleplay: '',
             max_tokens: '',
         };
 
+        const response = await axios.get(HAJI_GPTOSS_URL, { params: apiParams, timeout: 120000 });
+        const apiResponse = response.data;
+
+        if (!apiResponse || !apiResponse.answer) {
+            console.error('Invalid response from GPT-5 API. Full response:', JSON.stringify(apiResponse, null, 2));
+            throw new Error('Received an invalid response from the external GPT-5 API.');
+        }
+
+        const modelUsed = apiResponse.model_used || model;
+        const answer = apiResponse.answer;
+        const completionId = `chatcmpl-${Date.now()}`;
+
         if (stream) {
-            // Proper stream proxying
+            // Manually create the stream response, identical to Claude's
             res.setHeader('Content-Type', 'text/event-stream');
-            res.setHeader('Cache-Control', 'no-cache');
-            res.setHeader('Connection', 'keep-alive');
-
-            const backendResponse = await axios.get(HAJI_GPTOSS_URL, {
-                params: apiParams,
-                responseType: 'stream'
-            });
-
-            backendResponse.data.pipe(res);
-
+            const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
+            res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
+            const contentChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { content: answer }, finish_reason: null }] };
+            res.write(`data: ${JSON.stringify(contentChunk)}\n\n`);
+            const stopChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
+            res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
         } else {
-            // Non-streaming logic
-            const response = await axios.get(HAJI_GPTOSS_URL, { params: apiParams, timeout: 120000 });
-            const apiResponse = response.data;
-
-            if (!apiResponse || !apiResponse.answer) {
-                console.error('Invalid non-stream response from GPT-5 API:', apiResponse);
-                throw new Error('Received an invalid non-stream response from the external GPT-5 API.');
-            }
-
-            const modelUsed = apiResponse.model_used || model;
-            const answer = apiResponse.answer;
-            const completionId = `chatcmpl-${Date.now()}`;
             res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
         }
         return;
