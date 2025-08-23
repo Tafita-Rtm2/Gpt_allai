@@ -259,33 +259,34 @@ app.post('/v1/chat/completions', async (req, res) => {
       }
     }
 
-    const apiParams = { ask, model, api_key: HAJI_API_KEY, uid, stream };
+    const apiParams = { ask, model, api_key: HAJI_API_KEY, uid };
     if (finalImageUrl) apiParams.img_url = finalImageUrl;
 
+    // For Claude, we don't pass the stream parameter to the backend.
+    // We get the full response and then manually create a stream if requested by the client.
+    const response = await axios.get(HAJI_ANTHROPIC_URL, { params: apiParams, timeout: 120000 });
+    const apiResponse = response.data;
+    if (!apiResponse || !apiResponse.answer) {
+      throw new Error('Received an invalid response from the external API.');
+    }
+
+    const modelUsed = apiResponse.model_used || model;
+    const answer = apiResponse.answer;
+    const completionId = `chatcmpl-${Date.now()}`;
+
     if (stream) {
-        // Proper stream proxying for Claude models
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-
-        const backendResponse = await axios.get(HAJI_ANTHROPIC_URL, {
-            params: apiParams,
-            responseType: 'stream'
-        });
-
-        backendResponse.data.pipe(res);
+      // Manually create the stream response
+      res.setHeader('Content-Type', 'text/event-stream');
+      const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
+      res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
+      const contentChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { content: answer }, finish_reason: null }] };
+      res.write(`data: ${JSON.stringify(contentChunk)}\n\n`);
+      const stopChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
+      res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
     } else {
-        // Non-streaming logic for Claude models
-        const response = await axios.get(HAJI_ANTHROPIC_URL, { params: apiParams, timeout: 120000 });
-        const apiResponse = response.data;
-        if (!apiResponse || !apiResponse.answer) {
-          throw new Error('Received an invalid response from the external API.');
-        }
-
-        const modelUsed = apiResponse.model_used || model;
-        const answer = apiResponse.answer;
-        const completionId = `chatcmpl-${Date.now()}`;
-        res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
+      res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
     }
   } catch (error) {
     console.error('Error during chat completion:', error.message);
