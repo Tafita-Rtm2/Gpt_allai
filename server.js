@@ -142,6 +142,8 @@ app.post('/v1/chat/completions', async (req, res) => {
             uid,
             reasoning_effort: 'high',
             stream: stream,
+            roleplay: '',
+            max_tokens: '',
         };
 
         let finalAsk = ask;
@@ -186,6 +188,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         const apiResponse = response.data;
 
         if (!apiResponse || !apiResponse.answer) {
+            console.error('Invalid response from GPT-5 API. Full response:', JSON.stringify(apiResponse, null, 2));
             throw new Error('Received an invalid response from the external GPT-5 API.');
         }
 
@@ -279,7 +282,7 @@ app.post('/v1/chat/completions', async (req, res) => {
       res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
       const contentChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { content: answer }, finish_reason: null }] };
       res.write(`data: ${JSON.stringify(contentChunk)}\n\n`);
-      const stopChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(DateI9.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
+      const stopChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
       res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
       res.write('data: [DONE]\n\n');
       res.end();
