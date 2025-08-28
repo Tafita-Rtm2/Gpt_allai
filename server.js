@@ -169,10 +169,6 @@ app.post('/v1/chat/completions', async (req, res) => {
             model: model,
             api_key: HAJI_API_KEY,
             uid,
-            reasoning_effort: reasoning_effort || 'high',
-            roleplay,
-            max_tokens: max_tokens || '', // Pass max_tokens, default to empty string
-            stream: false,
         };
 
         const response = await axios.get(HAJI_GPTOSS_URL, { params: apiParams, timeout: 120000 });
