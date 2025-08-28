@@ -37,7 +37,7 @@ const IMGBB_UPLOAD_URL = process.env.IMGBB_UPLOAD_URL;
 let availableKeys = [...VALID_API_KEYS];
 
 const imageGenerationKeywords = [
-    'generate image of', 'generate an image of', 'generate image', 'generate an image', 'generate',
+    'generate image of', 'cree une image', 'generate an image of', 'generate image', 'generate an image', 'generate',
     'create image of', 'create an image of', 'create image', 'create an image', 'create',
     'draw image of', 'draw an image of', 'draw image', 'draw an image', 'draw',
     'génère une image de', 'génère image de', 'génère une image', 'génère image', 'génère',
@@ -86,15 +86,15 @@ app.get('/v1/models', async (req, res) => {
       owned_by: 'rtm-mix-api',
     }));
 
-    // Add the hardcoded GPT-5 models to the list
-    const gpt5ModelsToAdd = gpt5Models.map(modelId => ({
+    // Add the hardcoded GPT-OSS models to the list
+    const gptOssModelsToAdd = gptOssModels.map(modelId => ({
         id: modelId,
         object: 'model',
         created: Math.floor(Date.now() / 1000),
         owned_by: 'rtm-mix-api',
     }));
 
-    modelsData = modelsData.concat(gpt5ModelsToAdd);
+    modelsData = modelsData.concat(gptOssModelsToAdd);
 
     res.json({ object: 'list', data: modelsData });
   } catch (error) {
@@ -102,7 +102,7 @@ app.get('/v1/models', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch models.' });
   }
 });
-const gpt5Models = ['chatgpt-5', 'chatgpt-5-pro'];
+const gptOssModels = ['gpt-oss-20b', 'gpt-oss-120b'];
 
 app.post('/v1/chat/completions', async (req, res) => {
   const { model, messages, stream, user } = req.body;
@@ -133,9 +133,8 @@ app.post('/v1/chat/completions', async (req, res) => {
     const lowerCaseAsk = ask.toLowerCase().trim();
     const triggerKeyword = imageGenerationKeywords.find(keyword => lowerCaseAsk === keyword || lowerCaseAsk.startsWith(keyword + ' '));
 
-    if (gpt5Models.includes(model)) {
-        // --- Start of GPT-5 Logic (now mirrors Claude's logic) ---
-        const gptModel = model === 'chatgpt-5-pro' ? 'gpt-oss-120b' : 'gpt-oss-20b';
+    if (gptOssModels.includes(model)) {
+        // --- Start of GPT-OSS Logic (now mirrors Claude's logic) ---
         let finalAsk = ask;
 
         if (imageUrl) {
@@ -165,7 +164,7 @@ app.post('/v1/chat/completions', async (req, res) => {
 
         const apiParams = {
             ask: finalAsk,
-            model: gptModel,
+            model: model,
             api_key: HAJI_API_KEY,
             uid,
         };
@@ -174,8 +173,8 @@ app.post('/v1/chat/completions', async (req, res) => {
         const apiResponse = response.data;
 
         if (!apiResponse || !apiResponse.answer) {
-            console.error('Invalid response from GPT-5 API. Full response:', JSON.stringify(apiResponse, null, 2));
-            throw new Error('Received an invalid response from the external GPT-5 API.');
+            console.error('Invalid response from GPT-OSS API. Full response:', JSON.stringify(apiResponse, null, 2));
+            throw new Error('Received an invalid response from the external GPT-OSS API.');
         }
 
         const modelUsed = apiResponse.model_used || model;
