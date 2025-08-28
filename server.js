@@ -136,41 +136,35 @@ app.post('/v1/chat/completions', async (req, res) => {
     const triggerKeyword = imageGenerationKeywords.find(keyword => lowerCaseAsk === keyword || lowerCaseAsk.startsWith(keyword + ' '));
 
     if (gptOssModels.includes(model)) {
-        // --- Start of GPT-OSS Logic (now mirrors Claude's logic) ---
-        let finalAsk = ask;
-
+        // --- Start of GPT-OSS Logic (now truly mirrors Claude's logic) ---
+        let finalImageUrl = null;
         if (imageUrl) {
-            let finalImageUrl = null;
             if (imageUrl.startsWith('data:image')) {
                 const base64Data = imageUrl.replace(/^data:image\/[a-z]+;base64,/, "");
                 const form = new FormData();
                 form.append('image', base64Data);
                 const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders() });
-                finalImageUrl = imgbbResponse.data && imgbbResponse.data.success ? imgbbResponse.data.data.url : null;
+                if (imgbbResponse.data && imgbbResponse.data.success) {
+                    finalImageUrl = imgbbResponse.data.data.url;
+                } else {
+                    throw new Error('Failed to upload image to ImgBB.');
+                }
             } else {
                 finalImageUrl = imageUrl;
             }
-
-            if (!finalImageUrl) throw new Error('Failed to process and upload image for analysis.');
-
-            const claudeResponse = await axios.get(HAJI_ANTHROPIC_URL, {
-                params: { ask: "Analyze this image and describe it in detail.", model: 'claude-3-haiku-20240307', api_key: HAJI_API_KEY, uid, img_url: finalImageUrl },
-                timeout: 120000
-            });
-
-            if (!claudeResponse.data || !claudeResponse.data.answer) throw new Error('Failed to get image description from Claude API.');
-
-            const imageDescription = claudeResponse.data.answer;
-            finalAsk = `The user provided an image with the following description: "${imageDescription}". The user's prompt is: "${ask}". Please respond to the user's prompt based on the image description.`;
         }
 
         const apiParams = {
-            ask: finalAsk,
+            ask: ask,
             model: model,
             api_key: 'e30864f5c326f6e3d70b032000ef5e2fa610cb5d9bc5759711d33036e303cef4',
             uid,
+            reasoning_effort: reasoning_effort || 'high',
+            roleplay,
+            max_tokens: max_tokens || '',
             stream: false,
         };
+        if (finalImageUrl) apiParams.img_url = finalImageUrl;
 
         const response = await axios.get(HAJI_GPTOSS_URL, { params: apiParams, timeout: 120000 });
         const apiResponse = response.data;
@@ -199,7 +193,7 @@ app.post('/v1/chat/completions', async (req, res) => {
             res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
         }
         return;
-        // --- End of GPT-5 Logic ---
+        // --- End of GPT-OSS Logic ---
     }
 
     if (triggerKeyword && !imageUrl) {
