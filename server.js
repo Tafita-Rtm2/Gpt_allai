@@ -105,10 +105,12 @@ app.get('/v1/models', async (req, res) => {
 const gptOssModels = ['gpt-oss-20b', 'gpt-oss-120b'];
 
 app.post('/v1/chat/completions', async (req, res) => {
-  const { model, messages, stream, user } = req.body;
+  const { model, messages, stream, user, max_tokens, reasoning_effort } = req.body;
   if (!messages || messages.length === 0) {
     return res.status(400).json({ error: 'Invalid messages array.' });
   }
+  const systemMessage = messages.find(m => m.role === 'system');
+  const roleplay = systemMessage ? systemMessage.content : '';
   const userMessage = messages.filter(m => m.role === 'user').pop();
   if (!userMessage) {
     return res.status(400).json({ error: 'No user message found.' });
@@ -167,6 +169,9 @@ app.post('/v1/chat/completions', async (req, res) => {
             model: model,
             api_key: HAJI_API_KEY,
             uid,
+            reasoning_effort: reasoning_effort || 'high',
+            roleplay,
+            max_tokens: max_tokens || undefined, // Pass max_tokens if available
         };
 
         const response = await axios.get(HAJI_GPTOSS_URL, { params: apiParams, timeout: 120000 });
