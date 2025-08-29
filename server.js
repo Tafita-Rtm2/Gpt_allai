@@ -30,14 +30,14 @@ const CLAUDE_API_KEYS = (process.env.CLAUDE_API_KEYS || '').split(',').filter(Bo
 const GEMINI_API_KEYS = (process.env.GEMINI_API_KEYS || '').split(',').filter(Boolean);
 const OPENAI_GPT_API_KEYS = (process.env.OPENAI_GPT_API_KEYS || '').split(',').filter(Boolean);
 const PUTER_API_KEYS = (process.env.PUTER_API_KEYS || '').split(',').filter(Boolean);
-const DEEPSEEK_API_KEYS = (process.env.DEEPSEEK_API_KEYS || '').split(',').filter(Boolean);
+// DEEPSEEK is not a new provider, it uses PUTER_API_KEYS. No need for DEEPSEEK_API_KEYS.
 
 const VALID_API_KEYS = [
     ...CLAUDE_API_KEYS.map(k => `claude_${k}`),
     ...GEMINI_API_KEYS.map(k => `gemini_${k}`),
     ...OPENAI_GPT_API_KEYS.map(k => `openai_gpt_${k}`),
     ...PUTER_API_KEYS.map(k => `puter_${k}`),
-    ...DEEPSEEK_API_KEYS.map(k => `deepseek_${k}`),
+    ...PUTER_API_KEYS.map(k => `deepseek_${k}`), // Deepseek keys are derived from Puter keys
 ];
 
 if (VALID_API_KEYS.length === 0) {
@@ -98,7 +98,7 @@ app.post('/api/generate-key', (req, res) => {
             keyPool = PUTER_API_KEYS;
             break;
         case 'deepseek':
-            keyPool = DEEPSEEK_API_KEYS;
+            keyPool = PUTER_API_KEYS; // Deepseek uses the Puter key pool
             break;
         default:
             return res.status(400).json({ error: 'Invalid provider specified.' });
