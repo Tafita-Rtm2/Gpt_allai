@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - RTM AI Proxy</title>
+    <link rel="stylesheet" href="dashboard.style.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="dashboard-header">
+            <h1>Dashboard</h1>
+            <div>
+                <span id="user-email"></span>
+                <button id="logout-button">Logout</button>
+            </div>
+        </header>
+
+        <main class="dashboard-main">
+            <section class="card api-generator">
+                <h2>Generate New API Key</h2>
+                <div class="generation-form">
+                    <div class="form-group">
+                        <label for="provider-dropdown">Select a Provider</label>
+                        <select id="provider-dropdown">
+                            <option value="" selected>-- Please choose --</option>
+                            <option value="claude">Claude</option>
+                            <option value="gemini">Gemini</option>
+                            <option value="openai">OpenAI</option>
+                            <option value="puter">Puter</option>
+                        </select>
+                    </div>
+                    <div id="puter-filter-section" class="hidden form-group">
+                        <label for="puter-search">Optional: Filter Puter Models</label>
+                        <input type="search" id="puter-search" placeholder="Search for a model family...">
+                        <div id="puter-families-list"></div>
+                    </div>
+                    <button id="generate-key-button" disabled>Generate Key</button>
+                </div>
+                <div id="api-key-display" class="hidden">
+                    <h3>Your New Key:</h3>
+                    <div class="key-box">
+                        <code id="api-key-code"></code>
+                        <button id="copy-key-button">Copy</button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card chat-history">
+                <h2>Chat History</h2>
+                <div id="history-container">
+                    <p class="loading-history">Loading history...</p>
+                    <!-- History items will be injected here -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="dashboard.js"></script>
+</body>
+</html>

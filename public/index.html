@@ -3,56 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RTM AI Proxy - API Key Generation</title>
+    <title>Welcome - RTM AI Proxy</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Welcome to the RTM AI Proxy</h1>
-            <p class="description">
-                Select a provider to generate a tailored API key for your application.
+    <div class="auth-container">
+        <div class="auth-form-wrapper" id="login-form-wrapper">
+            <header>
+                <h1>Welcome Back!</h1>
+                <p>Log in to access your dashboard.</p>
+            </header>
+            <form id="login-form">
+                <div class="input-group">
+                    <label for="login-email">Email</label>
+                    <input type="email" id="login-email" required>
+                </div>
+                <div class="input-group">
+                    <label for="login-password">Password</label>
+                    <input type="password" id="login-password" required>
+                </div>
+                <button type="submit" class="btn-primary">Log In</button>
+                <p class="message" id="login-message"></p>
+            </form>
+            <p class="toggle-link">
+                Don't have an account? <a href="#" id="show-register">Sign up</a>
             </p>
-        </header>
+        </div>
 
-        <main id="main-content">
-            <div class="generation-form">
-                <section id="provider-selection">
-                    <h2>1. Select a Provider</h2>
-                    <select id="provider-dropdown">
-                        <option value="" selected>-- Please choose a provider --</option>
-                        <option value="claude">Claude</option>
-                        <option value="gemini">Gemini</option>
-                        <option value="openai">OpenAI</option>
-                        <option value="puter">Puter (includes Grok, Deepseek, etc.)</option>
-                    </select>
-                </section>
-
-                <section id="puter-filter-section" class="hidden">
-                    <h3>Optional: Filter Puter Models by Family</h3>
-                    <input type="search" id="puter-search" placeholder="Search for a model family (e.g., grok)...">
-                    <div id="puter-families-list">
-                        <!-- This will be populated dynamically -->
-                    </div>
-                </section>
-
-                <section id="key-generation">
-                    <h2>2. Generate Your API Key</h2>
-                    <button id="start-button" disabled>Get Your API Key</button>
-                </section>
-            </div>
-        </main>
-
-        <section id="api-key-section" class="hidden">
-            <h2>Your New API Key</h2>
-            <div class="api-key-display">
-                <code id="api-key-code"></code>
-                <button id="copy-button">Copy</button>
-            </div>
-            <p class="note">This key is safe to share. It combines your selection with a backend key.</p>
-        </section>
+        <div class="auth-form-wrapper hidden" id="register-form-wrapper">
+            <header>
+                <h1>Create Account</h1>
+                <p>Get started by creating a new account.</p>
+            </header>
+            <form id="register-form">
+                <div class="input-group">
+                    <label for="register-email">Email</label>
+                    <input type="email" id="register-email" required>
+                </div>
+                <div class="input-group">
+                    <label for="register-password">Password</label>
+                    <input type="password" id="register-password" required>
+                </div>
+                <button type="submit" class="btn-primary">Sign Up</button>
+                <p class="message" id="register-message"></p>
+            </form>
+            <p class="toggle-link">
+                Already have an account? <a href="#" id="show-login">Log in</a>
+            </p>
+        </div>
     </div>
-
     <script src="script.js"></script>
 </body>
 </html>

@@ -5,6 +5,9 @@ const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
 const FormData = require('form-data');
+const { db, initializeDatabase } = require('./database');
+const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -14,6 +17,77 @@ app.use(express.static('public'));
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] Received ${req.method} request for ${req.url}`);
   next();
+});
+
+// --- AUTHENTICATION ROUTES ---
+
+// User Registration
+app.post('/auth/register', async (req, res) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required.' });
+    }
+
+    try {
+        const existingUser = await new Promise((resolve, reject) => {
+            db.get('SELECT email FROM users WHERE email = ?', [email], (err, row) => {
+                if (err) reject(err);
+                resolve(row);
+            });
+        });
+
+        if (existingUser) {
+            return res.status(409).json({ error: 'User with this email already exists.' });
+        }
+
+        const saltRounds = 10;
+        const passwordHash = await bcrypt.hash(password, saltRounds);
+
+        db.run('INSERT INTO users (email, password_hash) VALUES (?, ?)', [email, passwordHash], function(err) {
+            if (err) {
+                console.error('Error registering user:', err.message);
+                return res.status(500).json({ error: 'Failed to register user.' });
+            }
+            res.status(201).json({ message: 'User registered successfully.' });
+        });
+    } catch (error) {
+        console.error('Registration error:', error);
+        res.status(500).json({ error: 'An internal server error occurred during registration.' });
+    }
+});
+
+// User Login
+app.post('/auth/login', (req, res) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required.' });
+    }
+
+    db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
+        if (err) {
+            console.error('Database error during login:', err.message);
+            return res.status(500).json({ error: 'Internal server error.' });
+        }
+        if (!user) {
+            return res.status(401).json({ error: 'Invalid credentials.' });
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password_hash);
+        if (!isMatch) {
+            return res.status(401).json({ error: 'Invalid credentials.' });
+        }
+
+        const authToken = crypto.randomBytes(30).toString('hex');
+        db.run('UPDATE users SET auth_token = ? WHERE id = ?', [authToken, user.id], (updateErr) => {
+            if (updateErr) {
+                console.error('Failed to update auth token:', updateErr.message);
+                return res.status(500).json({ error: 'Failed to log in.' });
+            }
+            res.json({ message: 'Login successful.', token: authToken });
+        });
+    });
 });
 
 // --- CONFIGURATION ---
@@ -186,44 +260,53 @@ const imageGenerationKeywords = [
     'dessine une image de', 'dessine image de', 'dessine une image', 'dessine image', 'dessine',
 ];
 
-const authenticate = (req, res, next) => {
+const authenticateApiKey = (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({ error: 'Authorization header is missing or malformed.' });
     }
     const compoundKey = authHeader.split(' ')[1];
-    const keyParts = compoundKey.split('--');
-    if (keyParts.length !== 2) {
-        return res.status(403).json({ error: 'Invalid API key format.' });
-    }
-    const filter = keyParts[0];
-    const providedKey = keyParts[1];
-    let providerContext = '';
-    let expectedKey = '';
-    if (filter === 'claude') {
-        providerContext = 'claude';
-        expectedKey = backendKeys.claude;
-    } else if (filter === 'gemini') {
-        providerContext = 'gemini';
-        expectedKey = backendKeys.gemini;
-    } else if (filter === 'openai') {
-        providerContext = 'openai';
-        expectedKey = backendKeys.openai;
-    } else {
-        providerContext = 'puter';
-        expectedKey = backendKeys.puter;
-    }
-    if (providedKey !== expectedKey) {
-        return res.status(403).json({ error: 'Invalid API key.' });
-    }
-    req.authInfo = {
-        filter: filter,
-        providerContext: providerContext,
-    };
-    next();
+
+    db.get('SELECT user_id, provider FROM api_keys WHERE api_key = ?', [compoundKey], (err, keyRecord) => {
+        if (err) {
+            return res.status(500).json({ error: 'Database error during API key authentication.' });
+        }
+        if (!keyRecord) {
+            return res.status(403).json({ error: 'Invalid API key.' });
+        }
+
+        const keyParts = compoundKey.split('--');
+        const filter = keyParts[0];
+
+        req.authInfo = {
+            userId: keyRecord.user_id,
+            providerContext: keyRecord.provider,
+            filter: filter,
+        };
+        next();
+    });
 };
 
-app.post('/api/generate-key', (req, res) => {
+// Middleware to protect routes that require a logged-in user session
+const authenticateWebSession = (req, res, next) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+        return res.status(401).json({ error: 'No authentication token provided.' });
+    }
+
+    db.get('SELECT id, email FROM users WHERE auth_token = ?', [token], (err, user) => {
+        if (err) {
+            return res.status(500).json({ error: 'Database error during authentication.' });
+        }
+        if (!user) {
+            return res.status(403).json({ error: 'Invalid or expired token.' });
+        }
+        req.user = user; // Add user info to the request object
+        next();
+    });
+};
+
+app.post('/api/generate-key', authenticateWebSession, (req, res) => {
     const { provider, sub_provider } = req.body;
     let backendKey;
     let prefix = provider;
@@ -250,14 +333,33 @@ app.post('/api/generate-key', (req, res) => {
         return res.status(503).json({ error: `No backend API key configured for the '${provider}' provider.` });
     }
     const compoundKey = `${prefix}--${backendKey}`;
-    res.json({ apiKey: compoundKey });
+
+    // Save the new key to the database
+    db.run('INSERT INTO api_keys (user_id, provider, api_key) VALUES (?, ?, ?)', [req.user.id, provider, compoundKey], function(err) {
+        if (err) {
+            console.error('Error saving API key:', err.message);
+            return res.status(500).json({ error: 'Failed to save API key.' });
+        }
+        res.json({ apiKey: compoundKey });
+    });
 });
 
-app.use('/v1', authenticate);
+app.use('/v1', authenticateApiKey);
 
 app.get('/api/puter-families', (req, res) => {
     const families = [...new Set(puterModels.map(model => model.split('/')[0]))];
     res.json(families.sort());
+});
+
+app.get('/api/history', authenticateWebSession, (req, res) => {
+    const userId = req.user.id;
+    db.all('SELECT * FROM chat_history WHERE user_id = ? ORDER BY timestamp DESC', [userId], (err, rows) => {
+        if (err) {
+            console.error('Error fetching chat history:', err.message);
+            return res.status(500).json({ error: 'Failed to retrieve chat history.' });
+        }
+        res.json(rows);
+    });
 });
 
 app.get('/v1/models', async (req, res) => {
@@ -308,7 +410,17 @@ app.get('/v1/models', async (req, res) => {
 });
 
 app.post('/v1/chat/completions', async (req, res) => {
-  const { model, messages, stream, user, max_tokens, google_api_key } = req.body;
+  const { userId } = req.authInfo;
+  const { model, messages, stream, max_tokens, google_api_key } = req.body;
+
+  const logChatHistory = (responseContent) => {
+    const messagesJson = JSON.stringify(messages);
+    const responseJson = JSON.stringify({ role: 'assistant', content: responseContent });
+    db.run('INSERT INTO chat_history (user_id, model, messages, response) VALUES (?, ?, ?, ?)', [userId, model, messagesJson, responseJson], (err) => {
+        if (err) console.error('Failed to log chat history:', err.message);
+    });
+  };
+
   if (!messages || messages.length === 0) {
     return res.status(400).json({ error: 'Invalid messages array.' });
   }
@@ -331,7 +443,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         imageUrl = imagePart.image_url.url;
       }
     }
-    const uid = user || `anonymous-user-${Date.now()}`;
+    const uid = userId;
     if (gpt5Models.includes(model)) {
         const apiParams = { ask: ask, model: model, api_key: HAJI_PUTER_API_KEY, uid, roleplay, stream: false, };
         const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 240000 });
@@ -339,6 +451,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         if (!apiResponse || !apiResponse.answer) { throw new Error('Received an invalid response from the external Puter API for a GPT-5 model.'); }
         const modelUsed = apiResponse.model_used || model;
         const answer = apiResponse.answer;
+        logChatHistory(answer);
         const completionId = `chatcmpl-${Date.now()}`;
         if (stream) {
             res.setHeader('Content-Type', 'text/event-stream');
@@ -369,6 +482,7 @@ app.post('/v1/chat/completions', async (req, res) => {
       if (!imgbbResponse.data || !imgbbResponse.data.success) { throw new Error('Failed to upload generated image to ImgBB.'); }
       const generatedImageUrl = imgbbResponse.data.data.url;
       const responseContent = `![Generated Image](${generatedImageUrl})`;
+      logChatHistory(responseContent);
       const completionId = `chatcmpl-gen-${Date.now()}`;
       if (stream) {
         const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
@@ -404,6 +518,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from Gemini API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external Gemini API.'); }
         const modelUsed = apiResponse.model_used || model;
         const answer = apiResponse.answer;
+        logChatHistory(answer);
         const completionId = `chatcmpl-${Date.now()}`;
         if (stream) {
             res.setHeader('Content-Type', 'text/event-stream');
@@ -426,6 +541,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from Puter API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external Puter API.'); }
         const modelUsed = apiResponse.model_used || model;
         const answer = apiResponse.answer;
+        logChatHistory(answer);
         const completionId = `chatcmpl-${Date.now()}`;
         if (stream) {
             res.setHeader('Content-Type', 'text/event-stream');
@@ -461,6 +577,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from OpenAI API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external OpenAI API.'); }
         const modelUsed = apiResponse.model_used || model;
         const answer = apiResponse.answer;
+        logChatHistory(answer);
         const completionId = `chatcmpl-${Date.now()}`;
         if (stream) {
             res.setHeader('Content-Type', 'text/event-stream');
@@ -500,6 +617,7 @@ app.post('/v1/chat/completions', async (req, res) => {
     if (!apiResponse || !apiResponse.answer) { throw new Error('Received an invalid response from the external API.'); }
     const modelUsed = apiResponse.model_used || model;
     const answer = apiResponse.answer;
+    logChatHistory(answer);
     const completionId = `chatcmpl-${Date.now()}`;
     if (stream) {
       res.setHeader('Content-Type', 'text/event-stream');
@@ -551,6 +669,9 @@ app.post('/v1/images/generations', async (req, res) => {
     res.status(500).json({ error: 'An internal server error occurred during image generation.' });
   }
 });
+
+// Initialize the database and create tables
+initializeDatabase();
 
 app.listen(PORT, () => {
   console.log(`OpenAI-compatible proxy server is running on http://localhost:${PORT}`);
