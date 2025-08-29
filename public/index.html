@@ -11,12 +11,34 @@
         <header>
             <h1>Welcome to the RTM AI Proxy</h1>
             <p class="description">
-                Our service provides a unified, high-performance interface to access a variety of cutting-edge AI models, including Claude, GPT-5, and Flux for image generation. To get started, you need an API key.
+                Select a provider to generate a tailored API key for your application.
             </p>
         </header>
 
         <main id="main-content">
-            <button id="start-button">Get Your API Key</button>
+            <div class="generation-form">
+                <section id="provider-selection">
+                    <h2>1. Select a Provider</h2>
+                    <select id="provider-dropdown">
+                        <option value="">--Please choose an option--</option>
+                        <option value="claude">Claude</option>
+                        <option value="gemini">Gemini</option>
+                        <option value="openai_gpt">OpenAI / GPT</option>
+                        <option value="puter">Puter (All)</option>
+                    </select>
+                </section>
+
+                <section id="puter-filter-section" class="hidden">
+                    <h3>Optional: Filter Puter Models</h3>
+                    <input type="search" id="puter-search" placeholder="Search for a model family...">
+                    <div id="puter-families-list"></div>
+                </section>
+
+                <section id="key-generation">
+                    <h2>2. Generate Your API Key</h2>
+                    <button id="start-button" disabled>Get Your API Key</button>
+                </section>
+            </div>
         </main>
 
         <section id="api-key-section" class="hidden">

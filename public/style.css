@@ -98,3 +98,53 @@ header h1 {
     color: #d93025;
     margin-top: 15px;
 }
+
+/* New Styles for Dropdown and Filters */
+.generation-form section {
+    margin-bottom: 25px;
+}
+
+#provider-dropdown, #puter-search {
+    width: 100%;
+    padding: 12px;
+    font-size: 1em;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    box-sizing: border-box; /* Ensures padding doesn't affect width */
+}
+
+#puter-filter-section {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: -10px;
+}
+
+#puter-search {
+    margin-bottom: 15px;
+}
+
+#puter-families-list {
+    max-height: 200px;
+    overflow-y: auto;
+    text-align: left;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 10px;
+}
+
+#puter-families-list label {
+    display: block;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+#puter-families-list label:hover {
+    background-color: #e8f0fe;
+}
+
+#puter-families-list input[type="radio"] {
+    margin-right: 10px;
+}
