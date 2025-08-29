@@ -25,32 +25,15 @@ const HAJI_PUTER_API_KEY = process.env.HAJI_PUTER_API_KEY;
 const HAJI_OPENAI_API_KEY = process.env.HAJI_OPENAI_API_KEY;
 const IMGBB_API_KEY = process.env.IMGBB_API_KEY;
 
-// Load provider-specific keys from .env
-const CLAUDE_API_KEYS = (process.env.CLAUDE_API_KEYS || '').split(',').filter(Boolean);
-const GEMINI_API_KEYS = (process.env.GEMINI_API_KEYS || '').split(',').filter(Boolean);
-const OPENAI_GPT_API_KEYS = (process.env.OPENAI_GPT_API_KEYS || '').split(',').filter(Boolean);
-const PUTER_API_KEYS = (process.env.PUTER_API_KEYS || '').split(',').filter(Boolean);
+// The backend keys are now the source of truth for authentication.
+// The old VALID_API_KEYS logic is removed.
+const backendKeys = {
+    claude: HAJI_API_KEY,
+    gemini: HAJI_GEMINI_API_KEY,
+    puter: HAJI_PUTER_API_KEY,
+    openai_gpt: HAJI_OPENAI_API_KEY,
+};
 
-// --- Dynamic API Key Validation ---
-// To support all Puter sub-families, we dynamically create the list of all valid keys.
-const puterFamilies = [...new Set(puterModels.map(model => model.split('/')[0]))];
-
-const allValidKeys = [
-    ...CLAUDE_API_KEYS.map(k => `claude_${k}`),
-    ...GEMINI_API_KEYS.map(k => `gemini_${k}`),
-    ...OPENAI_GPT_API_KEYS.map(k => `openai_gpt_${k}`),
-    ...PUTER_API_KEYS.map(k => `puter_${k}`),
-];
-
-// Add all puter sub-family keys
-puterFamilies.forEach(family => {
-    const prefixedKeys = PUTER_API_KEYS.map(k => `puter_${family}_${k}`);
-    allValidKeys.push(...prefixedKeys);
-});
-
-if (allValidKeys.length === 0) {
-    console.warn('Warning: No provider API keys found in .env. All API requests will be rejected.');
-}
 // API URLs from .env for security. No fallbacks for better security.
 const HAJI_ANTHROPIC_URL = process.env.HAJI_ANTHROPIC_URL;
 const HAJI_FLUX_URL = process.env.HAJI_FLUX_URL;
@@ -71,52 +54,71 @@ const imageGenerationKeywords = [
 ];
 
 const authenticate = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    return res.status(401).json({ error: 'Authorization header is missing' });
-  }
-  const token = authHeader.split(' ')[1];
-  if (!allValidKeys.includes(token)) {
-    return res.status(403).json({ error: 'Invalid API key' });
-  }
-  next();
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Authorization header is missing or malformed.' });
+    }
+
+    const compoundKey = authHeader.split(' ')[1];
+    const keyParts = compoundKey.split('--');
+
+    if (keyParts.length !== 2) {
+        return res.status(403).json({ error: 'Invalid API key format.' });
+    }
+
+    const filter = keyParts[0];
+    const providedKey = keyParts[1];
+
+    // Find which backend key this corresponds to
+    const providerContext = Object.keys(backendKeys).find(key => backendKeys[key] === providedKey);
+
+    if (!providerContext) {
+        return res.status(403).json({ error: 'Invalid API key.' });
+    }
+
+    // Attach auth info to the request for later use
+    req.authInfo = {
+        filter: filter,
+        providerContext: providerContext,
+    };
+
+    next();
 };
 
-// Endpoint to dispense an API key from the pool.
+// Endpoint to generate a compound API key.
 app.post('/api/generate-key', (req, res) => {
     const { provider, sub_provider } = req.body;
-    let keyPool;
+    let backendKey;
     let prefix = provider;
 
     switch (provider) {
         case 'claude':
-            keyPool = CLAUDE_API_KEYS;
+            backendKey = backendKeys.claude;
             break;
         case 'gemini':
-            keyPool = GEMINI_API_KEYS;
+            backendKey = backendKeys.gemini;
             break;
         case 'openai_gpt':
-            keyPool = OPENAI_GPT_API_KEYS;
+            backendKey = backendKeys.openai_gpt;
             break;
         case 'puter':
-            keyPool = PUTER_API_KEYS;
+            backendKey = backendKeys.puter;
+            // If a sub_provider is specified (e.g., 'grok'), prepend it to the key.
             if (sub_provider) {
-                prefix = `puter_${sub_provider}`;
+                prefix = sub_provider;
             }
             break;
         default:
             return res.status(400).json({ error: 'Invalid provider specified.' });
     }
 
-    if (!keyPool || keyPool.length === 0) {
-        return res.status(503).json({ error: `No API keys are available for the '${provider}' provider.` });
+    if (!backendKey) {
+        return res.status(503).json({ error: `No backend API key configured for the '${provider}' provider.` });
     }
 
-    // For simplicity, we'll dispense the first key from the provider's pool.
-    const key = keyPool[0];
-    const prefixedKey = `${prefix}_${key}`;
-
-    res.json({ apiKey: prefixedKey });
+    // The generated key is a combination of the filter/prefix and the actual backend key.
+    const compoundKey = `${prefix}--${backendKey}`;
+    res.json({ apiKey: compoundKey });
 });
 
 app.use('/v1', authenticate);
@@ -128,45 +130,41 @@ app.get('/api/puter-families', (req, res) => {
 
 app.get('/v1/models', async (req, res) => {
     try {
-        const authHeader = req.headers.authorization;
-        const token = authHeader.split(' ')[1];
-        const tokenParts = token.split('_');
-        const provider = tokenParts[0];
-
+        const { filter, providerContext } = req.authInfo;
         let modelsList = [];
-        let owner = provider;
+        let owner = filter;
 
-        if (provider === 'claude') {
-            const response = await axios.get(HAJI_ANTHROPIC_URL, {
-                params: { ask: 'hello', model: 'claude-3-opus-20240229', api_key: HAJI_API_KEY, uid: '1' },
-            });
-            if (!response.data.supported_models || !Array.isArray(response.data.supported_models)) {
-                throw new Error('Could not retrieve supported models from Claude API.');
-            }
-            modelsList = response.data.supported_models;
-            owner = 'anthropic';
-        } else if (provider === 'gemini') {
-            modelsList = geminiModels;
-            owner = 'google';
-        } else if (provider === 'openai') { // Note: The prefix is 'openai_gpt', but we handle that
-            modelsList = openAiGptModels;
-            owner = 'openai';
-        } else if (provider === 'puter') {
-            const subProvider = tokenParts.length > 2 ? tokenParts[1] : null;
-            if (subProvider) {
-                modelsList = puterModels.filter(m => m.startsWith(`${subProvider}/`));
-                owner = subProvider;
-            } else {
-                modelsList = puterModels;
-            }
-        } else {
-             // Fallback for openai_gpt prefix
-            if (provider === 'openai' && tokenParts[1] === 'gpt') {
+        switch (providerContext) {
+            case 'claude':
+                // For Claude, we fetch the models directly from their API
+                const response = await axios.get(HAJI_ANTHROPIC_URL, {
+                    params: { ask: 'hello', model: 'claude-3-opus-20240229', api_key: HAJI_API_KEY, uid: '1' },
+                });
+                if (!response.data.supported_models || !Array.isArray(response.data.supported_models)) {
+                    throw new Error('Could not retrieve supported models from Claude API.');
+                }
+                modelsList = response.data.supported_models;
+                owner = 'anthropic';
+                break;
+            case 'gemini':
+                modelsList = geminiModels;
+                owner = 'google';
+                break;
+            case 'openai_gpt':
                 modelsList = openAiGptModels;
                 owner = 'openai';
-            } else {
-                return res.status(400).json({ error: 'Invalid provider derived from API key.' });
-            }
+                break;
+            case 'puter':
+                // If the filter is 'puter', it means no sub-family was selected, so return all.
+                if (filter === 'puter') {
+                    modelsList = puterModels;
+                } else {
+                    // Otherwise, filter by the specific family (e.g., 'grok', 'deepseek')
+                    modelsList = puterModels.filter(m => m.startsWith(`${filter}/`));
+                }
+                break;
+            default:
+                return res.status(500).json({ error: 'Internal server error: Invalid provider context.' });
         }
 
         const modelsData = modelsList.map(modelId => ({
@@ -182,7 +180,6 @@ app.get('/v1/models', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch models.' });
     }
 });
-
 // Reorganize model lists as per user request
 const openAiGptModels = [
     "gpt-4-0613", "gpt-4", "gpt-3.5-turbo", "gpt-3.5-turbo-instruct", "gpt-3.5-turbo-instruct-0914",
@@ -507,7 +504,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         }
         return;
         // --- End of Puter Logic ---
-    } else if (openAiModels.includes(model)) {
+    } else if (openAiGptModels.includes(model)) {
         // --- Start of OpenAI Logic (mirrors Gemini's logic) ---
         let finalImageUrl = null;
         if (imageUrl) {

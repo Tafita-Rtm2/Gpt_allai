@@ -20,18 +20,20 @@
                 <section id="provider-selection">
                     <h2>1. Select a Provider</h2>
                     <select id="provider-dropdown">
-                        <option value="">--Please choose an option--</option>
+                        <option value="" selected>-- Please choose a provider --</option>
                         <option value="claude">Claude</option>
                         <option value="gemini">Gemini</option>
                         <option value="openai_gpt">OpenAI / GPT</option>
-                        <option value="puter">Puter (All)</option>
+                        <option value="puter">Puter (includes Grok, Deepseek, etc.)</option>
                     </select>
                 </section>
 
                 <section id="puter-filter-section" class="hidden">
-                    <h3>Optional: Filter Puter Models</h3>
-                    <input type="search" id="puter-search" placeholder="Search for a model family...">
-                    <div id="puter-families-list"></div>
+                    <h3>Optional: Filter Puter Models by Family</h3>
+                    <input type="search" id="puter-search" placeholder="Search for a model family (e.g., grok)...">
+                    <div id="puter-families-list">
+                        <!-- This will be populated dynamically -->
+                    </div>
                 </section>
 
                 <section id="key-generation">
@@ -47,7 +49,7 @@
                 <code id="api-key-code"></code>
                 <button id="copy-button">Copy</button>
             </div>
-            <p class="note">Please save this key somewhere safe. You will not be able to see it again.</p>
+            <p class="note">Please save this key somewhere safe. The key itself is a combination of a filter and your backend key, so it is safe to share with your end-users.</p>
         </section>
     </div>
 

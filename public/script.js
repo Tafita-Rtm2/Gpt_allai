@@ -1,32 +1,28 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Main elements
+    // --- DOM Elements ---
     const mainContent = document.getElementById('main-content');
     const startButton = document.getElementById('start-button');
     const apiKeySection = document.getElementById('api-key-section');
     const apiKeyCode = document.getElementById('api-key-code');
     const copyButton = document.getElementById('copy-button');
-
-    // New UI elements
     const providerDropdown = document.getElementById('provider-dropdown');
     const puterFilterSection = document.getElementById('puter-filter-section');
     const puterSearch = document.getElementById('puter-search');
     const puterFamiliesList = document.getElementById('puter-families-list');
 
-    let allPuterFamilies = [];
+    let allPuterFamilies = []; // Cache for the fetched families
 
     // --- Event Listeners ---
 
-    // 1. Provider Dropdown Change
+    // 1. Main Provider Dropdown Change
     providerDropdown.addEventListener('change', async () => {
         const selectedProvider = providerDropdown.value;
+        startButton.disabled = !selectedProvider; // Enable button if a provider is chosen
 
-        // Enable/disable the generate button
-        startButton.disabled = !selectedProvider;
-
-        // Show/hide the Puter sub-filter
         if (selectedProvider === 'puter') {
             puterFilterSection.classList.remove('hidden');
-            if (allPuterFamilies.length === 0) { // Fetch only once
+            // Fetch families only if they haven't been fetched yet
+            if (allPuterFamilies.length === 0) {
                 await fetchAndDisplayPuterFamilies();
             }
         } else {
@@ -34,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 2. Puter Family Search
+    // 2. Search input for Puter families
     puterSearch.addEventListener('input', () => {
         const searchTerm = puterSearch.value.toLowerCase();
         const filteredFamilies = allPuterFamilies.filter(family => family.toLowerCase().includes(searchTerm));
@@ -52,7 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const requestBody = { provider: selectedProvider };
 
-            // Check if a Puter sub-family is selected
+            // If Puter is selected, check for a sub-family selection
             if (selectedProvider === 'puter') {
                 const selectedFamilyInput = document.querySelector('input[name="puter-family"]:checked');
                 if (selectedFamilyInput) {
@@ -81,13 +77,14 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error('Error generating API key:', error);
             alert(`Could not generate an API key: ${error.message}`);
+        } finally {
             // Reset button state
             startButton.textContent = 'Get Your API Key';
             startButton.disabled = !providerDropdown.value;
         }
     });
 
-    // 4. Copy Button Click
+    // 4. Copy API Key Button
     copyButton.addEventListener('click', () => {
         navigator.clipboard.writeText(apiKeyCode.textContent).then(() => {
             copyButton.textContent = 'Copied!';
@@ -98,11 +95,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-
     // --- Helper Functions ---
 
     async function fetchAndDisplayPuterFamilies() {
         try {
+            puterFamiliesList.innerHTML = '<p>Loading families...</p>';
             const response = await fetch('/api/puter-families');
             if (!response.ok) throw new Error('Could not fetch Puter families.');
 
@@ -111,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (error) {
             console.error('Error fetching Puter families:', error);
-            puterFamiliesList.innerHTML = '<p>Could not load model families.</p>';
+            puterFamiliesList.innerHTML = '<p style="color: red;">Could not load model families.</p>';
         }
     }
 
@@ -122,6 +119,21 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // Add a "Select All" option first
+        const allLabel = document.createElement('label');
+        const allRadio = document.createElement('input');
+        allRadio.type = 'radio';
+        allRadio.name = 'puter-family';
+        allRadio.value = ''; // Empty value signifies all
+        allRadio.checked = true; // Default to all
+        const allSpan = document.createElement('span');
+        allSpan.className = 'family-name';
+        allSpan.textContent = ' All Puter Models';
+        allLabel.appendChild(allRadio);
+        allLabel.appendChild(allSpan);
+        puterFamiliesList.appendChild(allLabel);
+
+        // Add the rest of the families
         families.forEach(family => {
             const label = document.createElement('label');
             const radio = document.createElement('input');
@@ -129,8 +141,12 @@ document.addEventListener('DOMContentLoaded', () => {
             radio.name = 'puter-family';
             radio.value = family;
 
+            const span = document.createElement('span');
+            span.className = 'family-name';
+            span.textContent = ` ${family}`;
+
             label.appendChild(radio);
-            label.appendChild(document.createTextNode(` ${family}`));
+            label.appendChild(span);
             puterFamiliesList.appendChild(label);
         });
     }
