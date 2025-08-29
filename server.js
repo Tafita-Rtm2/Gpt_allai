@@ -29,6 +29,7 @@ if (VALID_API_KEYS.length === 0) {
 const HAJI_ANTHROPIC_URL = process.env.HAJI_ANTHROPIC_URL;
 const HAJI_FLUX_URL = process.env.HAJI_FLUX_URL;
 const HAJI_GPTOSS_URL = process.env.HAJI_GPTOSS_URL;
+const HAJI_GEMINI_URL = process.env.HAJI_GEMINI_URL;
 const IMGBB_UPLOAD_URL = process.env.IMGBB_UPLOAD_URL;
 
 // Create a pool of available keys to be dispensed.
@@ -96,6 +97,16 @@ app.get('/v1/models', async (req, res) => {
 
     modelsData = modelsData.concat(gptOssModelsToAdd);
 
+    // Add the hardcoded Gemini models to the list
+    const geminiModelsToAdd = geminiModels.map(modelId => ({
+        id: modelId,
+        object: 'model',
+        created: Math.floor(Date.now() / 1000),
+        owned_by: 'rtm-mix-api',
+    }));
+
+    modelsData = modelsData.concat(geminiModelsToAdd);
+
     res.json({ object: 'list', data: modelsData });
   } catch (error) {
     console.error('Error fetching models:', error.message);
@@ -103,9 +114,23 @@ app.get('/v1/models', async (req, res) => {
   }
 });
 const gptOssModels = ['gpt-oss-20b', 'gpt-oss-120b'];
+const geminiModels = [
+    "gemini-1.5-pro-latest", "gemini-1.5-pro-002", "gemini-1.5-pro", "gemini-1.5-flash-latest",
+    "gemini-1.5-flash", "gemini-1.5-flash-002", "gemini-1.5-flash-8b", "gemini-1.5-flash-8b-001",
+    "gemini-1.5-flash-8b-latest", "gemini-2.5-pro-preview-03-25", "gemini-2.5-flash-preview-05-20",
+    "gemini-2.5-flash", "gemini-2.5-flash-lite-preview-06-17", "gemini-2.5-pro-preview-05-06",
+    "gemini-2.5-pro-preview-06-05", "gemini-2.5-pro", "gemini-2.0-flash-exp", "gemini-2.0-flash",
+    "gemini-2.0-flash-001", "gemini-2.0-flash-exp-image-generation", "gemini-2.0-flash-lite-001",
+    "gemini-2.0-flash-lite", "gemini-2.0-flash-preview-image-generation", "gemini-2.0-flash-lite-preview-02-05",
+    "gemini-2.0-flash-lite-preview", "gemini-2.0-pro-exp", "gemini-2.0-pro-exp-02-05", "gemini-exp-1206",
+    "gemini-2.0-flash-thinking-exp-01-21", "gemini-2.0-flash-thinking-exp", "gemini-2.0-flash-thinking-exp-1219",
+    "gemini-2.5-flash-preview-tts", "gemini-2.5-pro-preview-tts", "learnlm-2.0-flash-experimental",
+    "gemma-3-1b-it", "gemma-3-4b-it", "gemma-3-12b-it", "gemma-3-27b-it", "gemma-3n-e4b-it",
+    "gemma-3n-e2b-it", "gemini-2.5-flash-lite", "gemini-2.5-flash-image-preview"
+];
 
 app.post('/v1/chat/completions', async (req, res) => {
-  const { model, messages, stream, user, max_tokens, reasoning_effort } = req.body;
+  const { model, messages, stream, user, max_tokens, google_api_key } = req.body;
   if (!messages || messages.length === 0) {
     return res.status(400).json({ error: 'Invalid messages array.' });
   }
@@ -136,35 +161,40 @@ app.post('/v1/chat/completions', async (req, res) => {
     const triggerKeyword = imageGenerationKeywords.find(keyword => lowerCaseAsk === keyword || lowerCaseAsk.startsWith(keyword + ' '));
 
     if (gptOssModels.includes(model)) {
-        // --- Start of GPT-OSS Logic (now truly mirrors Claude's logic) ---
-        let finalImageUrl = null;
+        // --- Start of GPT-OSS Logic (now mirrors Claude's logic) ---
+        let finalAsk = ask;
+
         if (imageUrl) {
+            let finalImageUrl = null;
             if (imageUrl.startsWith('data:image')) {
                 const base64Data = imageUrl.replace(/^data:image\/[a-z]+;base64,/, "");
                 const form = new FormData();
                 form.append('image', base64Data);
                 const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders() });
-                if (imgbbResponse.data && imgbbResponse.data.success) {
-                    finalImageUrl = imgbbResponse.data.data.url;
-                } else {
-                    throw new Error('Failed to upload image to ImgBB.');
-                }
+                finalImageUrl = imgbbResponse.data && imgbbResponse.data.success ? imgbbResponse.data.data.url : null;
             } else {
                 finalImageUrl = imageUrl;
             }
+
+            if (!finalImageUrl) throw new Error('Failed to process and upload image for analysis.');
+
+            const claudeResponse = await axios.get(HAJI_ANTHROPIC_URL, {
+                params: { ask: "Analyze this image and describe it in detail.", model: 'claude-3-haiku-20240307', api_key: HAJI_API_KEY, uid, img_url: finalImageUrl },
+                timeout: 120000
+            });
+
+            if (!claudeResponse.data || !claudeResponse.data.answer) throw new Error('Failed to get image description from Claude API.');
+
+            const imageDescription = claudeResponse.data.answer;
+            finalAsk = `The user provided an image with the following description: "${imageDescription}". The user's prompt is: "${ask}". Please respond to the user's prompt based on the image description.`;
         }
 
         const apiParams = {
-            ask: ask,
+            ask: finalAsk,
             model: model,
-            api_key: 'e30864f5c326f6e3d70b032000ef5e2fa610cb5d9bc5759711d33036e303cef4',
+            api_key: HAJI_API_KEY,
             uid,
-            reasoning_effort: reasoning_effort || 'high',
-            roleplay,
-            max_tokens: max_tokens || '',
-            stream: false,
         };
-        if (finalImageUrl) apiParams.img_url = finalImageUrl;
 
         const response = await axios.get(HAJI_GPTOSS_URL, { params: apiParams, timeout: 120000 });
         const apiResponse = response.data;
@@ -193,7 +223,64 @@ app.post('/v1/chat/completions', async (req, res) => {
             res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
         }
         return;
-        // --- End of GPT-OSS Logic ---
+        // --- End of GPT-5 Logic ---
+    } else if (geminiModels.includes(model)) {
+        // --- Start of Gemini Logic (mirrors Claude's logic) ---
+        let finalImageUrl = null;
+        if (imageUrl) {
+            if (imageUrl.startsWith('data:image')) {
+                const base64Data = imageUrl.replace(/^data:image\/[a-z]+;base64,/, "");
+                const form = new FormData();
+                form.append('image', base64Data);
+                const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders() });
+                if (imgbbResponse.data && imgbbResponse.data.success) {
+                    finalImageUrl = imgbbResponse.data.data.url;
+                } else {
+                    throw new Error('Failed to upload image to ImgBB.');
+                }
+            } else {
+                finalImageUrl = imageUrl;
+            }
+        }
+
+        const apiParams = {
+            ask: ask,
+            model: model,
+            api_key: 'e30864f5c326f6e3d70b032000ef5e2fa610cb5d9bc5759711d33036e303cef4',
+            uid,
+            roleplay,
+            max_tokens: max_tokens || '',
+            google_api_key: google_api_key || '',
+        };
+        if (finalImageUrl) apiParams.file_url = finalImageUrl;
+
+        const response = await axios.get(HAJI_GEMINI_URL, { params: apiParams, timeout: 120000 });
+        const apiResponse = response.data;
+
+        if (!apiResponse || !apiResponse.answer) {
+            console.error('Invalid response from Gemini API. Full response:', JSON.stringify(apiResponse, null, 2));
+            throw new Error('Received an invalid response from the external Gemini API.');
+        }
+
+        const modelUsed = apiResponse.model_used || model;
+        const answer = apiResponse.answer;
+        const completionId = `chatcmpl-${Date.now()}`;
+
+        if (stream) {
+            res.setHeader('Content-Type', 'text/event-stream');
+            const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
+            res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
+            const contentChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { content: answer }, finish_reason: null }] };
+            res.write(`data: ${JSON.stringify(contentChunk)}\n\n`);
+            const stopChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
+            res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+        } else {
+            res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
+        }
+        return;
+        // --- End of Gemini Logic ---
     }
 
     if (triggerKeyword && !imageUrl) {
@@ -320,7 +407,7 @@ app.listen(PORT, () => {
 
   const requiredVars = [
     'HAJI_API_KEY', 'IMGBB_API_KEY', 'VALID_API_KEYS',
-    'HAJI_ANTHROPIC_URL', 'HAJI_FLUX_URL', 'IMGBB_UPLOAD_URL', 'HAJI_GPTOSS_URL'
+    'HAJI_ANTHROPIC_URL', 'HAJI_FLUX_URL', 'IMGBB_UPLOAD_URL', 'HAJI_GPTOSS_URL', 'HAJI_GEMINI_URL'
   ];
   const missingVars = requiredVars.filter(v => !process.env[v]);
 
