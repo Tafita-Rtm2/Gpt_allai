@@ -233,8 +233,10 @@ const geminiModels = [
 ];
 
 const puterModels = [
-    // Add GPT-5 models to Puter list
-    "openai/gpt-5-chat", "openai/gpt-5", "openai/gpt-5-mini", "openai/gpt-5-nano", "gpt-5-nano",
+    // Add all GPT-5 models to Puter list
+    "openai/gpt-5-chat", "openai/gpt-5", "openai/gpt-5-mini", "openai/gpt-5-nano",
+    "gpt-5-nano", "gpt-5-chat-latest", "gpt-5-2025-08-07", "gpt-5", "gpt-5-mini-2025-08-07",
+    "gpt-5-mini", "gpt-5-nano-2025-08-07",
     // Original Puter models (excluding the ones now in openAiGptModels)
     "qwen/qwen3-30b-a3b-thinking-2507", "x-ai/grok-code-fast-1", "nousresearch/hermes-4-70b", "nousresearch/hermes-4-405b",
     "google/gemini-2.5-flash-image-preview", "deepseek/deepseek-chat-v3.1", "deepseek/deepseek-v3.1-base",
