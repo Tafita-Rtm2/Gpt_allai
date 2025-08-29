@@ -25,16 +25,14 @@ const HAJI_PUTER_API_KEY = process.env.HAJI_PUTER_API_KEY;
 const HAJI_OPENAI_API_KEY = process.env.HAJI_OPENAI_API_KEY;
 const IMGBB_API_KEY = process.env.IMGBB_API_KEY;
 
-// The backend keys are now the source of truth for authentication.
-// The old VALID_API_KEYS logic is removed.
 const backendKeys = {
     claude: HAJI_API_KEY,
     gemini: HAJI_GEMINI_API_KEY,
     puter: HAJI_PUTER_API_KEY,
-    openai_gpt: HAJI_OPENAI_API_KEY,
+    openai: HAJI_OPENAI_API_KEY,
 };
 
-// API URLs from .env for security. No fallbacks for better security.
+// API URLs from .env
 const HAJI_ANTHROPIC_URL = process.env.HAJI_ANTHROPIC_URL;
 const HAJI_FLUX_URL = process.env.HAJI_FLUX_URL;
 const HAJI_GPTOSS_URL = process.env.HAJI_GPTOSS_URL;
@@ -44,162 +42,15 @@ const HAJI_OPENAI_URL = process.env.HAJI_OPENAI_URL;
 const HAJI_IMAGEN_URL = process.env.HAJI_IMAGEN_URL;
 const IMGBB_UPLOAD_URL = process.env.IMGBB_UPLOAD_URL;
 
-const imageGenerationKeywords = [
-    'generate image of', 'cree une image', 'generate an image of', 'generate image', 'generate an image', 'generate',
-    'create image of', 'create an image of', 'create image', 'create an image', 'create',
-    'draw image of', 'draw an image of', 'draw image', 'draw an image', 'draw',
-    'génère une image de', 'génère image de', 'génère une image', 'génère image', 'génère',
-    'crée une image de', 'crée image de', 'crée une image', 'crée image', 'crée',
-    'dessine une image de', 'dessine image de', 'dessine une image', 'dessine image', 'dessine',
+// --- MODEL DATA ---
+const gpt5Models = [
+    "openai/gpt-5-chat", "openai/gpt-5", "openai/gpt-5-mini", "openai/gpt-5-nano",
+    "gpt-5-nano", "gpt-5-chat-latest", "gpt-5-2025-08-07", "gpt-5", "gpt-5-mini-2025-08-07",
+    "gpt-5-mini", "gpt-5-nano-2025-08-07",
 ];
 
-const authenticate = (req, res, next) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'Authorization header is missing or malformed.' });
-    }
-
-    const compoundKey = authHeader.split(' ')[1];
-    const keyParts = compoundKey.split('--');
-
-    if (keyParts.length !== 2) {
-        return res.status(403).json({ error: 'Invalid API key format.' });
-    }
-
-    const filter = keyParts[0];
-    const providedKey = keyParts[1];
-
-    let providerContext = '';
-    let expectedKey = '';
-
-    // Determine the expected provider and key based on the filter.
-    // This is more robust than finding the key by its value.
-    if (filter === 'claude') {
-        providerContext = 'claude';
-        expectedKey = backendKeys.claude;
-    } else if (filter === 'gemini') {
-        providerContext = 'gemini';
-        expectedKey = backendKeys.gemini;
-    } else if (filter === 'openai_gpt') {
-        providerContext = 'openai_gpt';
-        expectedKey = backendKeys.openai_gpt;
-    } else {
-        // Any other filter (e.g., 'puter', 'grok', 'deepseek') must use the puter key.
-        providerContext = 'puter';
-        expectedKey = backendKeys.puter;
-    }
-
-    // Now, validate the provided key against the expected key.
-    if (providedKey !== expectedKey) {
-        return res.status(403).json({ error: 'Invalid API key.' });
-    }
-
-    // Attach auth info to the request for later use
-    req.authInfo = {
-        filter: filter,
-        providerContext: providerContext, // This is now correctly determined
-    };
-
-    next();
-};
-
-// Endpoint to generate a compound API key.
-app.post('/api/generate-key', (req, res) => {
-    const { provider, sub_provider } = req.body;
-    let backendKey;
-    let prefix = provider;
-
-    switch (provider) {
-        case 'claude':
-            backendKey = backendKeys.claude;
-            break;
-        case 'gemini':
-            backendKey = backendKeys.gemini;
-            break;
-        case 'openai_gpt':
-            backendKey = backendKeys.openai_gpt;
-            break;
-        case 'puter':
-            backendKey = backendKeys.puter;
-            // If a sub_provider is specified (e.g., 'grok'), prepend it to the key.
-            if (sub_provider) {
-                prefix = sub_provider;
-            }
-            break;
-        default:
-            return res.status(400).json({ error: 'Invalid provider specified.' });
-    }
-
-    if (!backendKey) {
-        return res.status(503).json({ error: `No backend API key configured for the '${provider}' provider.` });
-    }
-
-    // The generated key is a combination of the filter/prefix and the actual backend key.
-    const compoundKey = `${prefix}--${backendKey}`;
-    res.json({ apiKey: compoundKey });
-});
-
-app.use('/v1', authenticate);
-
-app.get('/api/puter-families', (req, res) => {
-    const families = [...new Set(puterModels.map(model => model.split('/')[0]))];
-    res.json(families.sort());
-});
-
-app.get('/v1/models', async (req, res) => {
-    try {
-        const { filter, providerContext } = req.authInfo;
-        let modelsList = [];
-        let owner = filter;
-
-        switch (providerContext) {
-            case 'claude':
-                // For Claude, we fetch the models directly from their API
-                const response = await axios.get(HAJI_ANTHROPIC_URL, {
-                    params: { ask: 'hello', model: 'claude-3-opus-20240229', api_key: HAJI_API_KEY, uid: '1' },
-                });
-                if (!response.data.supported_models || !Array.isArray(response.data.supported_models)) {
-                    throw new Error('Could not retrieve supported models from Claude API.');
-                }
-                modelsList = response.data.supported_models;
-                owner = 'anthropic';
-                break;
-            case 'gemini':
-                modelsList = geminiModels;
-                owner = 'google';
-                break;
-            case 'openai_gpt':
-                modelsList = openAiGptModels;
-                owner = 'openai';
-                break;
-            case 'puter':
-                // If the filter is 'puter', it means no sub-family was selected, so return all.
-                if (filter === 'puter') {
-                    modelsList = puterModels;
-                } else {
-                    // Otherwise, filter by the specific family (e.g., 'grok', 'deepseek')
-                    modelsList = puterModels.filter(m => m.startsWith(`${filter}/`));
-                }
-                break;
-            default:
-                return res.status(500).json({ error: 'Internal server error: Invalid provider context.' });
-        }
-
-        const modelsData = modelsList.map(modelId => ({
-            id: modelId,
-            object: 'model',
-            created: Math.floor(Date.now() / 1000),
-            owned_by: owner,
-        }));
-
-        res.json({ object: 'list', data: modelsData });
-    } catch (error) {
-        console.error('Error fetching models:', error.message);
-        res.status(500).json({ error: 'Failed to fetch models.' });
-    }
-});
-// Reorganize model lists as per user request
-const openAiGptModels = [
+const openAIModels = [
+    ...gpt5Models,
     "gpt-4-0613", "gpt-4", "gpt-3.5-turbo", "gpt-3.5-turbo-instruct", "gpt-3.5-turbo-instruct-0914",
     "gpt-4-1106-preview", "gpt-3.5-turbo-1106", "gpt-4-0125-preview", "gpt-4-turbo-preview", "gpt-3.5-turbo-0125",
     "gpt-4-turbo", "gpt-4-turbo-2024-04-09", "gpt-4o", "gpt-4o-2024-05-13", "gpt-4o-mini-2024-07-18", "gpt-4o-mini",
@@ -216,7 +67,6 @@ const openAiGptModels = [
     "openai/gpt-4-32k", "openai/gpt-4", "openai/gpt-3.5-turbo-0125", "openai/gpt-4-0314", "openai/gpt-3.5-turbo-0301",
     "openai/gpt-3.5-turbo"
 ];
-
 const geminiModels = [
     "gemini-1.5-pro-latest", "gemini-1.5-pro-002", "gemini-1.5-pro", "gemini-1.5-flash-latest",
     "gemini-1.5-flash", "gemini-1.5-flash-002", "gemini-1.5-flash-8b", "gemini-1.5-flash-8b-001",
@@ -231,13 +81,7 @@ const geminiModels = [
     "gemma-3-1b-it", "gemma-3-4b-it", "gemma-3-12b-it", "gemma-3-27b-it", "gemma-3n-e4b-it",
     "gemma-3n-e2b-it", "gemini-2.5-flash-lite", "gemini-2.5-flash-image-preview"
 ];
-
 const puterModels = [
-    // Add all GPT-5 models to Puter list
-    "openai/gpt-5-chat", "openai/gpt-5", "openai/gpt-5-mini", "openai/gpt-5-nano",
-    "gpt-5-nano", "gpt-5-chat-latest", "gpt-5-2025-08-07", "gpt-5", "gpt-5-mini-2025-08-07",
-    "gpt-5-mini", "gpt-5-nano-2025-08-07",
-    // Original Puter models (excluding the ones now in openAiGptModels)
     "qwen/qwen3-30b-a3b-thinking-2507", "x-ai/grok-code-fast-1", "nousresearch/hermes-4-70b", "nousresearch/hermes-4-405b",
     "google/gemini-2.5-flash-image-preview", "deepseek/deepseek-chat-v3.1", "deepseek/deepseek-v3.1-base",
     "mistralai/mistral-medium-3.1", "baidu/ernie-4.5-21b-a3b", "baidu/ernie-4.5-vl-28b-a3b", "z-ai/glm-4.5v", "ai21/jamba-mini-1.7",
@@ -332,17 +176,136 @@ const puterModels = [
     "anthropic/claude-2.0", "undi95/remm-slerp-l2-13b", "gryphe/mythomax-l2-13b",
     "meta-llama/llama-2-13b-chat", "meta-llama/llama-2-70b-chat"
 ];
-const openAiModels = [
-    "gpt-4-0613", "gpt-4", "gpt-3.5-turbo", "gpt-5-nano", "gpt-3.5-turbo-instruct", "gpt-3.5-turbo-instruct-0914",
-    "gpt-4-1106-preview", "gpt-3.5-turbo-1106", "gpt-4-0125-preview", "gpt-4-turbo-preview", "gpt-3.5-turbo-0125",
-    "gpt-4-turbo", "gpt-4-turbo-2024-04-09", "gpt-4o", "gpt-4o-2024-05-13", "gpt-4o-mini-2024-07-18", "gpt-4o-mini",
-    "gpt-4o-2024-08-06", "chatgpt-4o-latest", "o1-mini-2024-09-12", "o1-mini", "o1-2024-12-17", "o1", "o3-mini",
-    "o3-mini-2025-01-31", "gpt-4o-2024-11-20", "gpt-4o-search-preview-2025-03-11", "gpt-4o-search-preview",
-    "gpt-4o-mini-search-preview-2025-03-11", "gpt-4o-mini-search-preview", "o1-pro-2025-03-19", "o1-pro", "o3-2025-04-16",
-    "o4-mini-2025-04-16", "o3", "o4-mini", "gpt-4.1-2025-04-14", "gpt-4.1", "gpt-4.1-mini-2025-04-14", "gpt-4.1-mini",
-    "gpt-4.1-nano-2025-04-14", "gpt-4.1-nano", "gpt-5-chat-latest", "gpt-5-2025-08-07", "gpt-5", "gpt-5-mini-2025-08-07",
-    "gpt-5-mini", "gpt-5-nano-2025-08-07", "gpt-3.5-turbo-16k"
+
+const imageGenerationKeywords = [
+    'generate image of', 'cree une image', 'generate an image of', 'generate image', 'generate an image', 'generate',
+    'create image of', 'create an image of', 'create image', 'create an image', 'create',
+    'draw image of', 'draw an image of', 'draw image', 'draw an image', 'draw',
+    'génère une image de', 'génère image de', 'génère une image', 'génère image', 'génère',
+    'crée une image de', 'crée image de', 'crée une image', 'crée image', 'crée',
+    'dessine une image de', 'dessine image de', 'dessine une image', 'dessine image', 'dessine',
 ];
+
+const authenticate = (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Authorization header is missing or malformed.' });
+    }
+    const compoundKey = authHeader.split(' ')[1];
+    const keyParts = compoundKey.split('--');
+    if (keyParts.length !== 2) {
+        return res.status(403).json({ error: 'Invalid API key format.' });
+    }
+    const filter = keyParts[0];
+    const providedKey = keyParts[1];
+    let providerContext = '';
+    let expectedKey = '';
+    if (filter === 'claude') {
+        providerContext = 'claude';
+        expectedKey = backendKeys.claude;
+    } else if (filter === 'gemini') {
+        providerContext = 'gemini';
+        expectedKey = backendKeys.gemini;
+    } else if (filter === 'openai') {
+        providerContext = 'openai';
+        expectedKey = backendKeys.openai;
+    } else {
+        providerContext = 'puter';
+        expectedKey = backendKeys.puter;
+    }
+    if (providedKey !== expectedKey) {
+        return res.status(403).json({ error: 'Invalid API key.' });
+    }
+    req.authInfo = {
+        filter: filter,
+        providerContext: providerContext,
+    };
+    next();
+};
+
+app.post('/api/generate-key', (req, res) => {
+    const { provider, sub_provider } = req.body;
+    let backendKey;
+    let prefix = provider;
+    switch (provider) {
+        case 'claude':
+            backendKey = backendKeys.claude;
+            break;
+        case 'gemini':
+            backendKey = backendKeys.gemini;
+            break;
+        case 'openai':
+            backendKey = backendKeys.openai;
+            break;
+        case 'puter':
+            backendKey = backendKeys.puter;
+            if (sub_provider) {
+                prefix = sub_provider;
+            }
+            break;
+        default:
+            return res.status(400).json({ error: 'Invalid provider specified.' });
+    }
+    if (!backendKey) {
+        return res.status(503).json({ error: `No backend API key configured for the '${provider}' provider.` });
+    }
+    const compoundKey = `${prefix}--${backendKey}`;
+    res.json({ apiKey: compoundKey });
+});
+
+app.use('/v1', authenticate);
+
+app.get('/api/puter-families', (req, res) => {
+    const families = [...new Set(puterModels.map(model => model.split('/')[0]))];
+    res.json(families.sort());
+});
+
+app.get('/v1/models', async (req, res) => {
+    try {
+        const { filter, providerContext } = req.authInfo;
+        let modelsList = [];
+        let owner = filter;
+        switch (providerContext) {
+            case 'claude':
+                const response = await axios.get(HAJI_ANTHROPIC_URL, {
+                    params: { ask: 'hello', model: 'claude-3-opus-20240229', api_key: HAJI_API_KEY, uid: '1' },
+                });
+                if (!response.data.supported_models || !Array.isArray(response.data.supported_models)) {
+                    throw new Error('Could not retrieve supported models from Claude API.');
+                }
+                modelsList = response.data.supported_models;
+                owner = 'anthropic';
+                break;
+            case 'gemini':
+                modelsList = geminiModels;
+                owner = 'google';
+                break;
+            case 'openai':
+                modelsList = openAIModels;
+                owner = 'openai';
+                break;
+            case 'puter':
+                if (filter === 'puter') {
+                    modelsList = puterModels;
+                } else {
+                    modelsList = puterModels.filter(m => m.startsWith(`${filter}/`));
+                }
+                break;
+            default:
+                return res.status(500).json({ error: 'Internal server error: Invalid provider context.' });
+        }
+        const modelsData = modelsList.map(modelId => ({
+            id: modelId,
+            object: 'model',
+            created: Math.floor(Date.now() / 1000),
+            owned_by: owner,
+        }));
+        res.json({ object: 'list', data: modelsData });
+    } catch (error) {
+        console.error('Error fetching models:', error.message);
+        res.status(500).json({ error: 'Failed to fetch models.' });
+    }
+});
 
 app.post('/v1/chat/completions', async (req, res) => {
   const { model, messages, stream, user, max_tokens, google_api_key } = req.body;
@@ -355,11 +318,9 @@ app.post('/v1/chat/completions', async (req, res) => {
   if (!userMessage) {
     return res.status(400).json({ error: 'No user message found.' });
   }
-
   try {
     let ask = '';
     let imageUrl = null;
-
     if (typeof userMessage.content === 'string') {
       ask = userMessage.content;
     } else if (Array.isArray(userMessage.content)) {
@@ -370,48 +331,45 @@ app.post('/v1/chat/completions', async (req, res) => {
         imageUrl = imagePart.image_url.url;
       }
     }
-
     const uid = user || `anonymous-user-${Date.now()}`;
+    if (gpt5Models.includes(model)) {
+        const apiParams = { ask: ask, model: model, api_key: HAJI_PUTER_API_KEY, uid, roleplay, stream: false, };
+        const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 240000 });
+        const apiResponse = response.data;
+        if (!apiResponse || !apiResponse.answer) { throw new Error('Received an invalid response from the external Puter API for a GPT-5 model.'); }
+        const modelUsed = apiResponse.model_used || model;
+        const answer = apiResponse.answer;
+        const completionId = `chatcmpl-${Date.now()}`;
+        if (stream) {
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.write(`data: ${JSON.stringify({ id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] })}\n\n`);
+            res.write(`data: ${JSON.stringify({ id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { content: answer }, finish_reason: null }] })}\n\n`);
+            res.write(`data: ${JSON.stringify({ id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+        } else {
+            res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
+        }
+        return;
+    }
     const lowerCaseAsk = ask.toLowerCase().trim();
     const triggerKeyword = imageGenerationKeywords.find(keyword => lowerCaseAsk === keyword || lowerCaseAsk.startsWith(keyword + ' '));
-
-    // Handle image generation as a priority
     if (triggerKeyword && !imageUrl) {
       const prompt = ask.substring(triggerKeyword.length).trim();
       let imageResponse;
-
-      if (openAiModels.includes(model)) {
-        // Use the new Imagen API for OpenAI models
-        imageResponse = await axios.get(HAJI_IMAGEN_URL, {
-          params: {
-            prompt: prompt,
-            model: 'dall-e-3', // As per user's example
-            api_key: HAJI_OPENAI_API_KEY,
-          },
-          responseType: 'arraybuffer',
-        });
+      if (openAIModels.includes(model)) {
+        imageResponse = await axios.get(HAJI_IMAGEN_URL, { params: { prompt: prompt, model: 'dall-e-3', api_key: HAJI_OPENAI_API_KEY, }, responseType: 'arraybuffer', });
       } else {
-        // Use the existing Flux API for all other models (Claude, Gemini, Puter, etc.)
-        imageResponse = await axios.get(HAJI_FLUX_URL, {
-          params: { prompt, api_key: HAJI_API_KEY, uid },
-          responseType: 'arraybuffer',
-        });
+        imageResponse = await axios.get(HAJI_FLUX_URL, { params: { prompt, api_key: HAJI_API_KEY, uid }, responseType: 'arraybuffer', });
       }
-
       const base64Data = Buffer.from(imageResponse.data, 'binary').toString('base64');
       const form = new FormData();
       form.append('image', base64Data);
-      const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, {
-        headers: form.getHeaders(),
-      });
-
-      if (!imgbbResponse.data || !imgbbResponse.data.success) {
-        throw new Error('Failed to upload generated image to ImgBB.');
-      }
+      const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders(), });
+      if (!imgbbResponse.data || !imgbbResponse.data.success) { throw new Error('Failed to upload generated image to ImgBB.'); }
       const generatedImageUrl = imgbbResponse.data.data.url;
       const responseContent = `![Generated Image](${generatedImageUrl})`;
       const completionId = `chatcmpl-gen-${Date.now()}`;
-
       if (stream) {
         const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
         res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
@@ -426,11 +384,7 @@ app.post('/v1/chat/completions', async (req, res) => {
       }
       return;
     }
-
-    // --- Start of Standard Chat Logic ---
-
     if (geminiModels.includes(model)) {
-        // --- Start of Gemini Logic (mirrors Claude's logic) ---
         let finalImageUrl = null;
         if (imageUrl) {
             if (imageUrl.startsWith('data:image')) {
@@ -438,39 +392,19 @@ app.post('/v1/chat/completions', async (req, res) => {
                 const form = new FormData();
                 form.append('image', base64Data);
                 const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders() });
-                if (imgbbResponse.data && imgbbResponse.data.success) {
-                    finalImageUrl = imgbbResponse.data.data.url;
-                } else {
-                    throw new Error('Failed to upload image to ImgBB.');
-                }
+                if (imgbbResponse.data && imgbbResponse.data.success) { finalImageUrl = imgbbResponse.data.data.url; } else { throw new Error('Failed to upload image to ImgBB.'); }
             } else {
                 finalImageUrl = imageUrl;
             }
         }
-
-        const apiParams = {
-            ask: ask,
-            model: model,
-            api_key: HAJI_GEMINI_API_KEY,
-            uid,
-            roleplay,
-            max_tokens: max_tokens || '',
-            google_api_key: google_api_key || '',
-        };
+        const apiParams = { ask: ask, model: model, api_key: HAJI_GEMINI_API_KEY, uid, roleplay, max_tokens: max_tokens || '', google_api_key: google_api_key || '', };
         if (finalImageUrl) apiParams.file_url = finalImageUrl;
-
         const response = await axios.get(HAJI_GEMINI_URL, { params: apiParams, timeout: 240000 });
         const apiResponse = response.data;
-
-        if (!apiResponse || !apiResponse.answer) {
-            console.error('Invalid response from Gemini API. Full response:', JSON.stringify(apiResponse, null, 2));
-            throw new Error('Received an invalid response from the external Gemini API.');
-        }
-
+        if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from Gemini API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external Gemini API.'); }
         const modelUsed = apiResponse.model_used || model;
         const answer = apiResponse.answer;
         const completionId = `chatcmpl-${Date.now()}`;
-
         if (stream) {
             res.setHeader('Content-Type', 'text/event-stream');
             const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
@@ -485,30 +419,14 @@ app.post('/v1/chat/completions', async (req, res) => {
             res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
         }
         return;
-        // --- End of Gemini Logic ---
     } else if (puterModels.includes(model)) {
-        // --- Start of Puter Logic ---
-        const apiParams = {
-            ask: ask,
-            model: model,
-            api_key: HAJI_PUTER_API_KEY,
-            uid,
-            roleplay,
-            stream: false,
-        };
-
+        const apiParams = { ask: ask, model: model, api_key: HAJI_PUTER_API_KEY, uid, roleplay, stream: false, };
         const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 240000 });
         const apiResponse = response.data;
-
-        if (!apiResponse || !apiResponse.answer) {
-            console.error('Invalid response from Puter API. Full response:', JSON.stringify(apiResponse, null, 2));
-            throw new Error('Received an invalid response from the external Puter API.');
-        }
-
+        if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from Puter API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external Puter API.'); }
         const modelUsed = apiResponse.model_used || model;
         const answer = apiResponse.answer;
         const completionId = `chatcmpl-${Date.now()}`;
-
         if (stream) {
             res.setHeader('Content-Type', 'text/event-stream');
             const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
@@ -523,9 +441,7 @@ app.post('/v1/chat/completions', async (req, res) => {
             res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
         }
         return;
-        // --- End of Puter Logic ---
-    } else if (openAiGptModels.includes(model)) {
-        // --- Start of OpenAI Logic (mirrors Gemini's logic) ---
+    } else if (openAIModels.includes(model)) {
         let finalImageUrl = null;
         if (imageUrl) {
             if (imageUrl.startsWith('data:image')) {
@@ -533,38 +449,19 @@ app.post('/v1/chat/completions', async (req, res) => {
                 const form = new FormData();
                 form.append('image', base64Data);
                 const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders() });
-                if (imgbbResponse.data && imgbbResponse.data.success) {
-                    finalImageUrl = imgbbResponse.data.data.url;
-                } else {
-                    throw new Error('Failed to upload image to ImgBB.');
-                }
+                if (imgbbResponse.data && imgbbResponse.data.success) { finalImageUrl = imgbbResponse.data.data.url; } else { throw new Error('Failed to upload image to ImgBB.'); }
             } else {
                 finalImageUrl = imageUrl;
             }
         }
-
-        const apiParams = {
-            ask: ask,
-            model: model,
-            api_key: HAJI_OPENAI_API_KEY,
-            uid,
-            roleplay,
-            max_tokens: max_tokens || '',
-        };
+        const apiParams = { ask: ask, model: model, api_key: HAJI_OPENAI_API_KEY, uid, roleplay, max_tokens: max_tokens || '', };
         if (finalImageUrl) apiParams.img_url = finalImageUrl;
-
         const response = await axios.get(HAJI_OPENAI_URL, { params: apiParams, timeout: 240000 });
         const apiResponse = response.data;
-
-        if (!apiResponse || !apiResponse.answer) {
-            console.error('Invalid response from OpenAI API. Full response:', JSON.stringify(apiResponse, null, 2));
-            throw new Error('Received an invalid response from the external OpenAI API.');
-        }
-
+        if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from OpenAI API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external OpenAI API.'); }
         const modelUsed = apiResponse.model_used || model;
         const answer = apiResponse.answer;
         const completionId = `chatcmpl-${Date.now()}`;
-
         if (stream) {
             res.setHeader('Content-Type', 'text/event-stream');
             const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
@@ -579,10 +476,7 @@ app.post('/v1/chat/completions', async (req, res) => {
             res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
         }
         return;
-        // --- End of OpenAI Logic ---
     }
-
-    // Fallback for Claude and other models
     let finalImageUrl = null;
     if (imageUrl) {
       if (imageUrl.startsWith('data:image')) {
@@ -599,24 +493,15 @@ app.post('/v1/chat/completions', async (req, res) => {
         finalImageUrl = imageUrl;
       }
     }
-
     const apiParams = { ask, model, api_key: HAJI_API_KEY, uid };
     if (finalImageUrl) apiParams.img_url = finalImageUrl;
-
-    // For Claude, we don't pass the stream parameter to the backend.
-    // We get the full response and then manually create a stream if requested by the client.
     const response = await axios.get(HAJI_ANTHROPIC_URL, { params: apiParams, timeout: 240000 });
     const apiResponse = response.data;
-    if (!apiResponse || !apiResponse.answer) {
-      throw new Error('Received an invalid response from the external API.');
-    }
-
+    if (!apiResponse || !apiResponse.answer) { throw new Error('Received an invalid response from the external API.'); }
     const modelUsed = apiResponse.model_used || model;
     const answer = apiResponse.answer;
     const completionId = `chatcmpl-${Date.now()}`;
-
     if (stream) {
-      // Manually create the stream response
       res.setHeader('Content-Type', 'text/event-stream');
       const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
       res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
@@ -669,13 +554,11 @@ app.post('/v1/images/generations', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`OpenAI-compatible proxy server is running on http://localhost:${PORT}`);
-
   const requiredVars = [
-    'HAJI_API_KEY', 'IMGBB_API_KEY', 'VALID_API_KEYS', 'HAJI_GEMINI_API_KEY', 'HAJI_PUTER_API_KEY', 'HAJI_OPENAI_API_KEY',
+    'HAJI_API_KEY', 'IMGBB_API_KEY', 'HAJI_GEMINI_API_KEY', 'HAJI_PUTER_API_KEY', 'HAJI_OPENAI_API_KEY',
     'HAJI_ANTHROPIC_URL', 'HAJI_FLUX_URL', 'IMGBB_UPLOAD_URL', 'HAJI_GPTOSS_URL', 'HAJI_GEMINI_URL', 'HAJI_PUTER_URL', 'HAJI_OPENAI_URL', 'HAJI_IMAGEN_URL'
   ];
   const missingVars = requiredVars.filter(v => !process.env[v]);
-
   if (missingVars.length > 0) {
     console.warn(`\n!!! WARNING: The following required environment variables are not set in your .env file:`);
     missingVars.forEach(v => console.warn(`- ${v}`));
