@@ -94,9 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 5. Click delegation for dynamically created radio buttons
     puterFamiliesList.addEventListener('click', (e) => {
         if (e.target.name === 'puter-family') {
-            // Remove 'selected' class from all labels
             document.querySelectorAll('#puter-families-list label').forEach(lbl => lbl.classList.remove('selected'));
-            // Add 'selected' class to the parent label of the clicked radio
             e.target.parentElement.classList.add('selected');
         }
     });
@@ -126,11 +124,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const allLabel = document.createElement('label');
-        allLabel.classList.add('selected'); // Default selection
+        allLabel.classList.add('selected');
         const allRadio = document.createElement('input');
         allRadio.type = 'radio';
         allRadio.name = 'puter-family';
-        allRadio.value = ''; // Empty value signifies all
+        allRadio.value = '';
         allRadio.checked = true;
         const allSpan = document.createElement('span');
         allSpan.className = 'family-name';
