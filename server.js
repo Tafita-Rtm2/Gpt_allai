@@ -286,6 +286,60 @@ app.post('/v1/chat/completions', async (req, res) => {
     const lowerCaseAsk = ask.toLowerCase().trim();
     const triggerKeyword = imageGenerationKeywords.find(keyword => lowerCaseAsk === keyword || lowerCaseAsk.startsWith(keyword + ' '));
 
+    // Handle image generation as a priority
+    if (triggerKeyword && !imageUrl) {
+      const prompt = ask.substring(triggerKeyword.length).trim();
+      let imageResponse;
+
+      if (openAiModels.includes(model)) {
+        // Use the new Imagen API for OpenAI models
+        imageResponse = await axios.get(HAJI_IMAGEN_URL, {
+          params: {
+            prompt: prompt,
+            model: 'dall-e-3', // As per user's example
+            api_key: HAJI_OPENAI_API_KEY,
+          },
+          responseType: 'arraybuffer',
+        });
+      } else {
+        // Use the existing Flux API for all other models (Claude, Gemini, Puter, etc.)
+        imageResponse = await axios.get(HAJI_FLUX_URL, {
+          params: { prompt, api_key: HAJI_API_KEY, uid },
+          responseType: 'arraybuffer',
+        });
+      }
+
+      const base64Data = Buffer.from(imageResponse.data, 'binary').toString('base64');
+      const form = new FormData();
+      form.append('image', base64Data);
+      const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, {
+        headers: form.getHeaders(),
+      });
+
+      if (!imgbbResponse.data || !imgbbResponse.data.success) {
+        throw new Error('Failed to upload generated image to ImgBB.');
+      }
+      const generatedImageUrl = imgbbResponse.data.data.url;
+      const responseContent = `![Generated Image](${generatedImageUrl})`;
+      const completionId = `chatcmpl-gen-${Date.now()}`;
+
+      if (stream) {
+        const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
+        res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
+        const contentChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: { content: responseContent }, finish_reason: null }] };
+        res.write(`data: ${JSON.stringify(contentChunk)}\n\n`);
+        const stopChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
+        res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+      } else {
+        res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, message: { role: 'assistant', content: responseContent }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
+      }
+      return;
+    }
+
+    // --- Start of Standard Chat Logic ---
+
     if (geminiModels.includes(model)) {
         // --- Start of Gemini Logic (mirrors Claude's logic) ---
         let finalImageUrl = null;
@@ -439,56 +493,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         // --- End of OpenAI Logic ---
     }
 
-    if (triggerKeyword && !imageUrl) {
-      const prompt = ask.substring(triggerKeyword.length).trim();
-      let imageResponse;
-
-      if (openAiModels.includes(model)) {
-        // Use the new Imagen API for OpenAI models
-        imageResponse = await axios.get(HAJI_IMAGEN_URL, {
-          params: {
-            prompt: prompt,
-            model: 'dall-e-3', // As per user's example
-            api_key: HAJI_OPENAI_API_KEY,
-          },
-          responseType: 'arraybuffer',
-        });
-      } else {
-        // Use the existing Flux API for other models
-        imageResponse = await axios.get(HAJI_FLUX_URL, {
-          params: { prompt, api_key: HAJI_API_KEY, uid },
-          responseType: 'arraybuffer',
-        });
-      }
-
-      const base64Data = Buffer.from(imageResponse.data, 'binary').toString('base64');
-      const form = new FormData();
-      form.append('image', base64Data);
-      const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, {
-        headers: form.getHeaders(),
-      });
-
-      if (!imgbbResponse.data || !imgbbResponse.data.success) {
-        throw new Error('Failed to upload generated image to ImgBB.');
-      }
-      const generatedImageUrl = imgbbResponse.data.data.url;
-      const responseContent = `![Generated Image](${generatedImageUrl})`;
-      const completionId = `chatcmpl-gen-${Date.now()}`;
-
-      if (stream) {
-        const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
-        res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
-        const contentChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: { content: responseContent }, finish_reason: null }] };
-        res.write(`data: ${JSON.stringify(contentChunk)}\n\n`);
-        const stopChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
-        res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
-        res.write('data: [DONE]\n\n');
-        res.end();
-      } else {
-        res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, message: { role: 'assistant', content: responseContent }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
-      }
-      return;
-    }
+    // Fallback for Claude and other models
     let finalImageUrl = null;
     if (imageUrl) {
       if (imageUrl.startsWith('data:image')) {
