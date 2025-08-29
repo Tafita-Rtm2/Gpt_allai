@@ -17,11 +17,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // 1. Main Provider Dropdown Change
     providerDropdown.addEventListener('change', async () => {
         const selectedProvider = providerDropdown.value;
-        startButton.disabled = !selectedProvider; // Enable button if a provider is chosen
+        startButton.disabled = !selectedProvider;
 
         if (selectedProvider === 'puter') {
             puterFilterSection.classList.remove('hidden');
-            // Fetch families only if they haven't been fetched yet
             if (allPuterFamilies.length === 0) {
                 await fetchAndDisplayPuterFamilies();
             }
@@ -47,11 +46,9 @@ document.addEventListener('DOMContentLoaded', () => {
             startButton.disabled = true;
 
             const requestBody = { provider: selectedProvider };
-
-            // If Puter is selected, check for a sub-family selection
             if (selectedProvider === 'puter') {
                 const selectedFamilyInput = document.querySelector('input[name="puter-family"]:checked');
-                if (selectedFamilyInput) {
+                if (selectedFamilyInput && selectedFamilyInput.value) {
                     requestBody.sub_provider = selectedFamilyInput.value;
                 }
             }
@@ -78,7 +75,6 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Error generating API key:', error);
             alert(`Could not generate an API key: ${error.message}`);
         } finally {
-            // Reset button state
             startButton.textContent = 'Get Your API Key';
             startButton.disabled = !providerDropdown.value;
         }
@@ -93,6 +89,16 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Failed to copy text: ', err);
             alert('Failed to copy key. Please copy it manually.');
         });
+    });
+
+    // 5. Click delegation for dynamically created radio buttons
+    puterFamiliesList.addEventListener('click', (e) => {
+        if (e.target.name === 'puter-family') {
+            // Remove 'selected' class from all labels
+            document.querySelectorAll('#puter-families-list label').forEach(lbl => lbl.classList.remove('selected'));
+            // Add 'selected' class to the parent label of the clicked radio
+            e.target.parentElement.classList.add('selected');
+        }
     });
 
     // --- Helper Functions ---
@@ -113,19 +119,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderPuterFamilies(families) {
-        puterFamiliesList.innerHTML = ''; // Clear existing list
-        if (families.length === 0) {
+        puterFamiliesList.innerHTML = '';
+        if (families.length === 0 && puterSearch.value) {
             puterFamiliesList.innerHTML = '<p>No matching families found.</p>';
             return;
         }
 
-        // Add a "Select All" option first
         const allLabel = document.createElement('label');
+        allLabel.classList.add('selected'); // Default selection
         const allRadio = document.createElement('input');
         allRadio.type = 'radio';
         allRadio.name = 'puter-family';
         allRadio.value = ''; // Empty value signifies all
-        allRadio.checked = true; // Default to all
+        allRadio.checked = true;
         const allSpan = document.createElement('span');
         allSpan.className = 'family-name';
         allSpan.textContent = ' All Puter Models';
@@ -133,7 +139,6 @@ document.addEventListener('DOMContentLoaded', () => {
         allLabel.appendChild(allSpan);
         puterFamiliesList.appendChild(allLabel);
 
-        // Add the rest of the families
         families.forEach(family => {
             const label = document.createElement('label');
             const radio = document.createElement('input');
