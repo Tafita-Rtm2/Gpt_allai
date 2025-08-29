@@ -292,7 +292,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         };
         if (finalImageUrl) apiParams.file_url = finalImageUrl;
 
-        const response = await axios.get(HAJI_GEMINI_URL, { params: apiParams, timeout: 120000 });
+        const response = await axios.get(HAJI_GEMINI_URL, { params: apiParams, timeout: 240000 });
         const apiResponse = response.data;
 
         if (!apiResponse || !apiResponse.answer) {
@@ -330,7 +330,7 @@ app.post('/v1/chat/completions', async (req, res) => {
             stream: false,
         };
 
-        const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 120000 });
+        const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 240000 });
         const apiResponse = response.data;
 
         if (!apiResponse || !apiResponse.answer) {
@@ -416,7 +416,7 @@ app.post('/v1/chat/completions', async (req, res) => {
 
     // For Claude, we don't pass the stream parameter to the backend.
     // We get the full response and then manually create a stream if requested by the client.
-    const response = await axios.get(HAJI_ANTHROPIC_URL, { params: apiParams, timeout: 120000 });
+    const response = await axios.get(HAJI_ANTHROPIC_URL, { params: apiParams, timeout: 240000 });
     const apiResponse = response.data;
     if (!apiResponse || !apiResponse.answer) {
       throw new Error('Received an invalid response from the external API.');
