@@ -22,6 +22,7 @@ const PORT = process.env.PORT || 3000;
 const HAJI_API_KEY = process.env.HAJI_API_KEY;
 const HAJI_GEMINI_API_KEY = process.env.HAJI_GEMINI_API_KEY;
 const HAJI_PUTER_API_KEY = process.env.HAJI_PUTER_API_KEY;
+const HAJI_OPENAI_API_KEY = process.env.HAJI_OPENAI_API_KEY;
 const IMGBB_API_KEY = process.env.IMGBB_API_KEY;
 const VALID_API_KEYS = (process.env.VALID_API_KEYS || '').split(',').filter(Boolean);
 if (VALID_API_KEYS.length === 0) {
@@ -33,6 +34,8 @@ const HAJI_FLUX_URL = process.env.HAJI_FLUX_URL;
 const HAJI_GPTOSS_URL = process.env.HAJI_GPTOSS_URL;
 const HAJI_GEMINI_URL = process.env.HAJI_GEMINI_URL;
 const HAJI_PUTER_URL = process.env.HAJI_PUTER_URL;
+const HAJI_OPENAI_URL = process.env.HAJI_OPENAI_URL;
+const HAJI_IMAGEN_URL = process.env.HAJI_IMAGEN_URL;
 const IMGBB_UPLOAD_URL = process.env.IMGBB_UPLOAD_URL;
 
 // Create a pool of available keys to be dispensed.
@@ -109,6 +112,16 @@ app.get('/v1/models', async (req, res) => {
     }));
 
     modelsData = modelsData.concat(puterModelsToAdd);
+
+    // Add the hardcoded OpenAI models to the list
+    const openAiModelsToAdd = openAiModels.map(modelId => ({
+        id: modelId,
+        object: 'model',
+        created: Math.floor(Date.now() / 1000),
+        owned_by: 'rtm-mix-api',
+    }));
+
+    modelsData = modelsData.concat(openAiModelsToAdd);
 
     res.json({ object: 'list', data: modelsData });
   } catch (error) {
@@ -229,6 +242,17 @@ const puterModels = [
     "anthropic/claude-2.0", "undi95/remm-slerp-l2-13b", "google/palm-2-chat-bison", "google/palm-2-codechat-bison", "gryphe/mythomax-l2-13b",
     "meta-llama/llama-2-13b-chat", "meta-llama/llama-2-70b-chat", "openai/gpt-4", "openai/gpt-3.5-turbo-0125", "openai/gpt-4-0314",
     "openai/gpt-3.5-turbo-0301", "openai/gpt-3.5-turbo"
+];
+const openAiModels = [
+    "gpt-4-0613", "gpt-4", "gpt-3.5-turbo", "gpt-5-nano", "gpt-3.5-turbo-instruct", "gpt-3.5-turbo-instruct-0914",
+    "gpt-4-1106-preview", "gpt-3.5-turbo-1106", "gpt-4-0125-preview", "gpt-4-turbo-preview", "gpt-3.5-turbo-0125",
+    "gpt-4-turbo", "gpt-4-turbo-2024-04-09", "gpt-4o", "gpt-4o-2024-05-13", "gpt-4o-mini-2024-07-18", "gpt-4o-mini",
+    "gpt-4o-2024-08-06", "chatgpt-4o-latest", "o1-mini-2024-09-12", "o1-mini", "o1-2024-12-17", "o1", "o3-mini",
+    "o3-mini-2025-01-31", "gpt-4o-2024-11-20", "gpt-4o-search-preview-2025-03-11", "gpt-4o-search-preview",
+    "gpt-4o-mini-search-preview-2025-03-11", "gpt-4o-mini-search-preview", "o1-pro-2025-03-19", "o1-pro", "o3-2025-04-16",
+    "o4-mini-2025-04-16", "o3", "o4-mini", "gpt-4.1-2025-04-14", "gpt-4.1", "gpt-4.1-mini-2025-04-14", "gpt-4.1-mini",
+    "gpt-4.1-nano-2025-04-14", "gpt-4.1-nano", "gpt-5-chat-latest", "gpt-5-2025-08-07", "gpt-5", "gpt-5-mini-2025-08-07",
+    "gpt-5-mini", "gpt-5-nano-2025-08-07", "gpt-3.5-turbo-16k"
 ];
 
 app.post('/v1/chat/completions', async (req, res) => {
@@ -357,16 +381,87 @@ app.post('/v1/chat/completions', async (req, res) => {
         }
         return;
         // --- End of Puter Logic ---
+    } else if (openAiModels.includes(model)) {
+        // --- Start of OpenAI Logic (mirrors Gemini's logic) ---
+        let finalImageUrl = null;
+        if (imageUrl) {
+            if (imageUrl.startsWith('data:image')) {
+                const base64Data = imageUrl.replace(/^data:image\/[a-z]+;base64,/, "");
+                const form = new FormData();
+                form.append('image', base64Data);
+                const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders() });
+                if (imgbbResponse.data && imgbbResponse.data.success) {
+                    finalImageUrl = imgbbResponse.data.data.url;
+                } else {
+                    throw new Error('Failed to upload image to ImgBB.');
+                }
+            } else {
+                finalImageUrl = imageUrl;
+            }
+        }
+
+        const apiParams = {
+            ask: ask,
+            model: model,
+            api_key: HAJI_OPENAI_API_KEY,
+            uid,
+            roleplay,
+            max_tokens: max_tokens || '',
+        };
+        if (finalImageUrl) apiParams.img_url = finalImageUrl;
+
+        const response = await axios.get(HAJI_OPENAI_URL, { params: apiParams, timeout: 240000 });
+        const apiResponse = response.data;
+
+        if (!apiResponse || !apiResponse.answer) {
+            console.error('Invalid response from OpenAI API. Full response:', JSON.stringify(apiResponse, null, 2));
+            throw new Error('Received an invalid response from the external OpenAI API.');
+        }
+
+        const modelUsed = apiResponse.model_used || model;
+        const answer = apiResponse.answer;
+        const completionId = `chatcmpl-${Date.now()}`;
+
+        if (stream) {
+            res.setHeader('Content-Type', 'text/event-stream');
+            const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
+            res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
+            const contentChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { content: answer }, finish_reason: null }] };
+            res.write(`data: ${JSON.stringify(contentChunk)}\n\n`);
+            const stopChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
+            res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+        } else {
+            res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
+        }
+        return;
+        // --- End of OpenAI Logic ---
     }
 
     if (triggerKeyword && !imageUrl) {
       const prompt = ask.substring(triggerKeyword.length).trim();
-      const fluxResponse = await axios.get(HAJI_FLUX_URL, {
-        params: { prompt, api_key: HAJI_API_KEY, uid },
-        responseType: 'arraybuffer',
-      });
+      let imageResponse;
 
-      const base64Data = Buffer.from(fluxResponse.data, 'binary').toString('base64');
+      if (openAiModels.includes(model)) {
+        // Use the new Imagen API for OpenAI models
+        imageResponse = await axios.get(HAJI_IMAGEN_URL, {
+          params: {
+            prompt: prompt,
+            model: 'dall-e-3', // As per user's example
+            api_key: HAJI_OPENAI_API_KEY,
+          },
+          responseType: 'arraybuffer',
+        });
+      } else {
+        // Use the existing Flux API for other models
+        imageResponse = await axios.get(HAJI_FLUX_URL, {
+          params: { prompt, api_key: HAJI_API_KEY, uid },
+          responseType: 'arraybuffer',
+        });
+      }
+
+      const base64Data = Buffer.from(imageResponse.data, 'binary').toString('base64');
       const form = new FormData();
       form.append('image', base64Data);
       const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, {
@@ -482,8 +577,8 @@ app.listen(PORT, () => {
   console.log(`OpenAI-compatible proxy server is running on http://localhost:${PORT}`);
 
   const requiredVars = [
-    'HAJI_API_KEY', 'IMGBB_API_KEY', 'VALID_API_KEYS', 'HAJI_GEMINI_API_KEY', 'HAJI_PUTER_API_KEY',
-    'HAJI_ANTHROPIC_URL', 'HAJI_FLUX_URL', 'IMGBB_UPLOAD_URL', 'HAJI_GPTOSS_URL', 'HAJI_GEMINI_URL', 'HAJI_PUTER_URL'
+    'HAJI_API_KEY', 'IMGBB_API_KEY', 'VALID_API_KEYS', 'HAJI_GEMINI_API_KEY', 'HAJI_PUTER_API_KEY', 'HAJI_OPENAI_API_KEY',
+    'HAJI_ANTHROPIC_URL', 'HAJI_FLUX_URL', 'IMGBB_UPLOAD_URL', 'HAJI_GPTOSS_URL', 'HAJI_GEMINI_URL', 'HAJI_PUTER_URL', 'HAJI_OPENAI_URL', 'HAJI_IMAGEN_URL'
   ];
   const missingVars = requiredVars.filter(v => !process.env[v]);
 
