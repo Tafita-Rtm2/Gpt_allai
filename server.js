@@ -20,6 +20,7 @@ app.use((req, res, next) => {
 const PORT = process.env.PORT || 3000;
 // API Keys
 const HAJI_API_KEY = process.env.HAJI_API_KEY;
+const HAJI_GEMINI_API_KEY = process.env.HAJI_GEMINI_API_KEY;
 const IMGBB_API_KEY = process.env.IMGBB_API_KEY;
 const VALID_API_KEYS = (process.env.VALID_API_KEYS || '').split(',').filter(Boolean);
 if (VALID_API_KEYS.length === 0) {
@@ -87,16 +88,6 @@ app.get('/v1/models', async (req, res) => {
       owned_by: 'rtm-mix-api',
     }));
 
-    // Add the hardcoded GPT-OSS models to the list
-    const gptOssModelsToAdd = gptOssModels.map(modelId => ({
-        id: modelId,
-        object: 'model',
-        created: Math.floor(Date.now() / 1000),
-        owned_by: 'rtm-mix-api',
-    }));
-
-    modelsData = modelsData.concat(gptOssModelsToAdd);
-
     // Add the hardcoded Gemini models to the list
     const geminiModelsToAdd = geminiModels.map(modelId => ({
         id: modelId,
@@ -113,7 +104,6 @@ app.get('/v1/models', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch models.' });
   }
 });
-const gptOssModels = ['gpt-oss-20b', 'gpt-oss-120b'];
 const geminiModels = [
     "gemini-1.5-pro-latest", "gemini-1.5-pro-002", "gemini-1.5-pro", "gemini-1.5-flash-latest",
     "gemini-1.5-flash", "gemini-1.5-flash-002", "gemini-1.5-flash-8b", "gemini-1.5-flash-8b-001",
@@ -160,71 +150,7 @@ app.post('/v1/chat/completions', async (req, res) => {
     const lowerCaseAsk = ask.toLowerCase().trim();
     const triggerKeyword = imageGenerationKeywords.find(keyword => lowerCaseAsk === keyword || lowerCaseAsk.startsWith(keyword + ' '));
 
-    if (gptOssModels.includes(model)) {
-        // --- Start of GPT-OSS Logic (now mirrors Claude's logic) ---
-        let finalAsk = ask;
-
-        if (imageUrl) {
-            let finalImageUrl = null;
-            if (imageUrl.startsWith('data:image')) {
-                const base64Data = imageUrl.replace(/^data:image\/[a-z]+;base64,/, "");
-                const form = new FormData();
-                form.append('image', base64Data);
-                const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders() });
-                finalImageUrl = imgbbResponse.data && imgbbResponse.data.success ? imgbbResponse.data.data.url : null;
-            } else {
-                finalImageUrl = imageUrl;
-            }
-
-            if (!finalImageUrl) throw new Error('Failed to process and upload image for analysis.');
-
-            const claudeResponse = await axios.get(HAJI_ANTHROPIC_URL, {
-                params: { ask: "Analyze this image and describe it in detail.", model: 'claude-3-haiku-20240307', api_key: HAJI_API_KEY, uid, img_url: finalImageUrl },
-                timeout: 120000
-            });
-
-            if (!claudeResponse.data || !claudeResponse.data.answer) throw new Error('Failed to get image description from Claude API.');
-
-            const imageDescription = claudeResponse.data.answer;
-            finalAsk = `The user provided an image with the following description: "${imageDescription}". The user's prompt is: "${ask}". Please respond to the user's prompt based on the image description.`;
-        }
-
-        const apiParams = {
-            ask: finalAsk,
-            model: model,
-            api_key: HAJI_API_KEY,
-            uid,
-        };
-
-        const response = await axios.get(HAJI_GPTOSS_URL, { params: apiParams, timeout: 120000 });
-        const apiResponse = response.data;
-
-        if (!apiResponse || !apiResponse.answer) {
-            console.error('Invalid response from GPT-OSS API. Full response:', JSON.stringify(apiResponse, null, 2));
-            throw new Error('Received an invalid response from the external GPT-OSS API.');
-        }
-
-        const modelUsed = apiResponse.model_used || model;
-        const answer = apiResponse.answer;
-        const completionId = `chatcmpl-${Date.now()}`;
-
-        if (stream) {
-            // Manually create the stream response, identical to Claude's
-            res.setHeader('Content-Type', 'text/event-stream');
-            const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
-            res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
-            const contentChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { content: answer }, finish_reason: null }] };
-            res.write(`data: ${JSON.stringify(contentChunk)}\n\n`);
-            const stopChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
-            res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
-            res.write('data: [DONE]\n\n');
-            res.end();
-        } else {
-            res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
-        }
-        return;
-        // --- End of GPT-5 Logic ---
-    } else if (geminiModels.includes(model)) {
+    if (geminiModels.includes(model)) {
         // --- Start of Gemini Logic (mirrors Claude's logic) ---
         let finalImageUrl = null;
         if (imageUrl) {
@@ -246,7 +172,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         const apiParams = {
             ask: ask,
             model: model,
-            api_key: 'e30864f5c326f6e3d70b032000ef5e2fa610cb5d9bc5759711d33036e303cef4',
+            api_key: HAJI_GEMINI_API_KEY,
             uid,
             roleplay,
             max_tokens: max_tokens || '',
@@ -406,7 +332,7 @@ app.listen(PORT, () => {
   console.log(`OpenAI-compatible proxy server is running on http://localhost:${PORT}`);
 
   const requiredVars = [
-    'HAJI_API_KEY', 'IMGBB_API_KEY', 'VALID_API_KEYS',
+    'HAJI_API_KEY', 'IMGBB_API_KEY', 'VALID_API_KEYS', 'HAJI_GEMINI_API_KEY',
     'HAJI_ANTHROPIC_URL', 'HAJI_FLUX_URL', 'IMGBB_UPLOAD_URL', 'HAJI_GPTOSS_URL', 'HAJI_GEMINI_URL'
   ];
   const missingVars = requiredVars.filter(v => !process.env[v]);
