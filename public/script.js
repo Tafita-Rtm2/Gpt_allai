@@ -10,8 +10,14 @@ document.addEventListener('DOMContentLoaded', () => {
             startButton.textContent = 'Generating...';
             startButton.disabled = true;
 
+            const selectedProvider = document.querySelector('input[name="provider"]:checked').value;
+
             const response = await fetch('/api/generate-key', {
                 method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ provider: selectedProvider }),
             });
 
             const data = await response.json();

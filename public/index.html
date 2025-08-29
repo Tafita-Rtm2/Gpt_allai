@@ -16,7 +16,36 @@
         </header>
 
         <main id="main-content">
-            <button id="start-button">Get Your API Key</button>
+            <section id="provider-selection">
+                <h2>1. Select a Model Provider</h2>
+                <div class="providers">
+                    <label>
+                        <input type="radio" name="provider" value="claude" checked>
+                        <span>Claude</span>
+                    </label>
+                    <label>
+                        <input type="radio" name="provider" value="gemini">
+                        <span>Gemini</span>
+                    </label>
+                    <label>
+                        <input type="radio" name="provider" value="openai_gpt">
+                        <span>OpenAI / GPT</span>
+                    </label>
+                    <label>
+                        <input type="radio" name="provider" value="puter">
+                        <span>Puter</span>
+                    </label>
+                    <label>
+                        <input type="radio" name="provider" value="deepseek">
+                        <span>Deepseek</span>
+                    </label>
+                </div>
+            </section>
+
+            <section id="key-generation">
+                <h2>2. Generate Your API Key</h2>
+                <button id="start-button">Get Your API Key</button>
+            </section>
         </main>
 
         <section id="api-key-section" class="hidden">
