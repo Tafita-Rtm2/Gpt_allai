@@ -69,17 +69,35 @@ const authenticate = (req, res, next) => {
     const filter = keyParts[0];
     const providedKey = keyParts[1];
 
-    // Find which backend key this corresponds to
-    const providerContext = Object.keys(backendKeys).find(key => backendKeys[key] === providedKey);
+    let providerContext = '';
+    let expectedKey = '';
 
-    if (!providerContext) {
+    // Determine the expected provider and key based on the filter.
+    // This is more robust than finding the key by its value.
+    if (filter === 'claude') {
+        providerContext = 'claude';
+        expectedKey = backendKeys.claude;
+    } else if (filter === 'gemini') {
+        providerContext = 'gemini';
+        expectedKey = backendKeys.gemini;
+    } else if (filter === 'openai_gpt') {
+        providerContext = 'openai_gpt';
+        expectedKey = backendKeys.openai_gpt;
+    } else {
+        // Any other filter (e.g., 'puter', 'grok', 'deepseek') must use the puter key.
+        providerContext = 'puter';
+        expectedKey = backendKeys.puter;
+    }
+
+    // Now, validate the provided key against the expected key.
+    if (providedKey !== expectedKey) {
         return res.status(403).json({ error: 'Invalid API key.' });
     }
 
     // Attach auth info to the request for later use
     req.authInfo = {
         filter: filter,
-        providerContext: providerContext,
+        providerContext: providerContext, // This is now correctly determined
     };
 
     next();
