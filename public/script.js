@@ -1,156 +1,101 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- DOM Elements ---
-    const mainContent = document.getElementById('main-content');
-    const startButton = document.getElementById('start-button');
-    const apiKeySection = document.getElementById('api-key-section');
-    const apiKeyCode = document.getElementById('api-key-code');
-    const copyButton = document.getElementById('copy-button');
-    const providerDropdown = document.getElementById('provider-dropdown');
-    const puterFilterSection = document.getElementById('puter-filter-section');
-    const puterSearch = document.getElementById('puter-search');
-    const puterFamiliesList = document.getElementById('puter-families-list');
+    const loginFormWrapper = document.getElementById('login-form-wrapper');
+    const registerFormWrapper = document.getElementById('register-form-wrapper');
+    const showRegisterLink = document.getElementById('show-register');
+    const showLoginLink = document.getElementById('show-login');
 
-    let allPuterFamilies = []; // Cache for the fetched families
+    const loginForm = document.getElementById('login-form');
+    const registerForm = document.getElementById('register-form');
 
-    // --- Event Listeners ---
+    const loginMessage = document.getElementById('login-message');
+    const registerMessage = document.getElementById('register-message');
 
-    // 1. Main Provider Dropdown Change
-    providerDropdown.addEventListener('change', async () => {
-        const selectedProvider = providerDropdown.value;
-        startButton.disabled = !selectedProvider;
-
-        if (selectedProvider === 'puter') {
-            puterFilterSection.classList.remove('hidden');
-            if (allPuterFamilies.length === 0) {
-                await fetchAndDisplayPuterFamilies();
-            }
-        } else {
-            puterFilterSection.classList.add('hidden');
-        }
+    // --- Toggle between Login and Register forms ---
+    showRegisterLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        loginFormWrapper.classList.add('hidden');
+        registerFormWrapper.classList.remove('hidden');
     });
 
-    // 2. Search input for Puter families
-    puterSearch.addEventListener('input', () => {
-        const searchTerm = puterSearch.value.toLowerCase();
-        const filteredFamilies = allPuterFamilies.filter(family => family.toLowerCase().includes(searchTerm));
-        renderPuterFamilies(filteredFamilies);
+    showLoginLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        registerFormWrapper.classList.add('hidden');
+        loginFormWrapper.classList.remove('hidden');
     });
 
-    // 3. Generate Key Button Click
-    startButton.addEventListener('click', async () => {
-        const selectedProvider = providerDropdown.value;
-        if (!selectedProvider) return;
+    // --- Handle Registration ---
+    registerForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('register-email').value;
+        const password = document.getElementById('register-password').value;
+
+        setMessage(registerMessage, 'Creating account...', 'pending');
 
         try {
-            startButton.textContent = 'Generating...';
-            startButton.disabled = true;
-
-            const requestBody = { provider: selectedProvider };
-            if (selectedProvider === 'puter') {
-                const selectedFamilyInput = document.querySelector('input[name="puter-family"]:checked');
-                if (selectedFamilyInput && selectedFamilyInput.value) {
-                    requestBody.sub_provider = selectedFamilyInput.value;
-                }
-            }
-
-            const response = await fetch('/api/generate-key', {
+            const response = await fetch('/auth/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody),
+                body: JSON.stringify({ email, password }),
             });
 
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.error || 'Failed to generate API key.');
+                throw new Error(data.error || 'Registration failed');
             }
 
-            if (data.apiKey) {
-                apiKeyCode.textContent = data.apiKey;
-                mainContent.classList.add('hidden');
-                apiKeySection.classList.remove('hidden');
-            }
+            setMessage(registerMessage, 'Account created! Please log in.', 'success');
+            setTimeout(() => {
+                registerFormWrapper.classList.add('hidden');
+                loginFormWrapper.classList.remove('hidden');
+                document.getElementById('login-email').value = email; // Pre-fill email
+            }, 1500);
 
         } catch (error) {
-            console.error('Error generating API key:', error);
-            alert(`Could not generate an API key: ${error.message}`);
-        } finally {
-            startButton.textContent = 'Get Your API Key';
-            startButton.disabled = !providerDropdown.value;
+            setMessage(registerMessage, error.message, 'error');
         }
     });
 
-    // 4. Copy API Key Button
-    copyButton.addEventListener('click', () => {
-        navigator.clipboard.writeText(apiKeyCode.textContent).then(() => {
-            copyButton.textContent = 'Copied!';
-            setTimeout(() => { copyButton.textContent = 'Copy'; }, 2000);
-        }).catch(err => {
-            console.error('Failed to copy text: ', err);
-            alert('Failed to copy key. Please copy it manually.');
-        });
-    });
+    // --- Handle Login ---
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('login-email').value;
+        const password = document.getElementById('login-password').value;
 
-    // 5. Click delegation for dynamically created radio buttons
-    puterFamiliesList.addEventListener('click', (e) => {
-        if (e.target.name === 'puter-family') {
-            document.querySelectorAll('#puter-families-list label').forEach(lbl => lbl.classList.remove('selected'));
-            e.target.parentElement.classList.add('selected');
-        }
-    });
+        setMessage(loginMessage, 'Logging in...', 'pending');
 
-    // --- Helper Functions ---
-
-    async function fetchAndDisplayPuterFamilies() {
         try {
-            puterFamiliesList.innerHTML = '<p>Loading families...</p>';
-            const response = await fetch('/api/puter-families');
-            if (!response.ok) throw new Error('Could not fetch Puter families.');
+            const response = await fetch('/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password }),
+            });
 
-            allPuterFamilies = await response.json();
-            renderPuterFamilies(allPuterFamilies);
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Login failed');
+            }
+
+            if (data.token) {
+                localStorage.setItem('authToken', data.token);
+                setMessage(loginMessage, 'Success! Redirecting...', 'success');
+                // Redirect to a new dashboard page after a short delay
+                setTimeout(() => {
+                    window.location.href = '/dashboard.html';
+                }, 1000);
+            } else {
+                throw new Error('No authentication token received.');
+            }
 
         } catch (error) {
-            console.error('Error fetching Puter families:', error);
-            puterFamiliesList.innerHTML = '<p style="color: red;">Could not load model families.</p>';
+            setMessage(loginMessage, error.message, 'error');
         }
-    }
+    });
 
-    function renderPuterFamilies(families) {
-        puterFamiliesList.innerHTML = '';
-        if (families.length === 0 && puterSearch.value) {
-            puterFamiliesList.innerHTML = '<p>No matching families found.</p>';
-            return;
-        }
-
-        const allLabel = document.createElement('label');
-        allLabel.classList.add('selected');
-        const allRadio = document.createElement('input');
-        allRadio.type = 'radio';
-        allRadio.name = 'puter-family';
-        allRadio.value = '';
-        allRadio.checked = true;
-        const allSpan = document.createElement('span');
-        allSpan.className = 'family-name';
-        allSpan.textContent = ' All Puter Models';
-        allLabel.appendChild(allRadio);
-        allLabel.appendChild(allSpan);
-        puterFamiliesList.appendChild(allLabel);
-
-        families.forEach(family => {
-            const label = document.createElement('label');
-            const radio = document.createElement('input');
-            radio.type = 'radio';
-            radio.name = 'puter-family';
-            radio.value = family;
-
-            const span = document.createElement('span');
-            span.className = 'family-name';
-            span.textContent = ` ${family}`;
-
-            label.appendChild(radio);
-            label.appendChild(span);
-            puterFamiliesList.appendChild(label);
-        });
+    // Helper function to display messages
+    function setMessage(element, text, type) {
+        element.textContent = text;
+        element.className = `message ${type}`;
     }
 });
