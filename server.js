@@ -281,11 +281,13 @@ const authenticateApiKey = async (req, res, next) => {
 
         const keyParts = compoundKey.split('--');
         const filter = keyParts[0];
+        const backendKey = keyParts.length > 1 ? keyParts.slice(1).join('--') : null;
 
         req.authInfo = {
             userId: keyRecord.user_id,
             providerContext: keyRecord.provider,
             filter: filter,
+            backendKey: backendKey,
         };
         next();
     } catch (error) {
@@ -398,30 +400,70 @@ app.delete('/api/keys/:id', authenticateWebSession, async (req, res) => {
 
 app.get('/v1/models', async (req, res) => {
     try {
-        const { filter, providerContext } = req.authInfo;
+        const { filter, providerContext, backendKey } = req.authInfo;
+        if (!backendKey) {
+            return res.status(400).json({ error: 'The API key is missing the backend key part.' });
+        }
+
         let modelsList = [];
         let owner = filter;
+
         switch (providerContext) {
             case 'claude':
-                const response = await axios.get(HAJI_ANTHROPIC_URL, {
-                    params: { ask: 'hello', model: 'claude-3-opus-20240229', api_key: HAJI_API_KEY, uid: '1' },
-                    timeout: 240000,
-                });
-                if (!response.data.supported_models || !Array.isArray(response.data.supported_models)) {
-                    throw new Error('Could not retrieve supported models from Claude API.');
+                try {
+                    const response = await axios.get(HAJI_ANTHROPIC_URL, {
+                        params: { ask: 'hello', model: 'claude-3-opus-20240229', api_key: backendKey, uid: req.authInfo.userId },
+                        timeout: 240000,
+                    });
+                    if (response.data && Array.isArray(response.data.supported_models)) {
+                        modelsList = response.data.supported_models;
+                    } else {
+                        throw new Error('Could not retrieve supported models from Claude API.');
+                    }
+                } catch (e) {
+                    console.error("Failed to fetch dynamic models for Claude, falling back to hardcoded list.", e.message);
+                    // Fallback for claude can be a smaller hardcoded list if needed
+                    modelsList = ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"];
                 }
-                modelsList = response.data.supported_models;
                 owner = 'anthropic';
                 break;
             case 'gemini':
-                modelsList = geminiModels;
+                try {
+                     const response = await axios.get(HAJI_GEMINI_URL, {
+                        params: { ask: 'hello', model: 'gemini-1.5-pro-latest', api_key: backendKey, uid: req.authInfo.userId },
+                        timeout: 240000,
+                    });
+                    if (response.data && Array.isArray(response.data.supported_models)) {
+                        modelsList = response.data.supported_models;
+                    } else {
+                        // If the proxy doesn't return a model list, use the hardcoded one.
+                        modelsList = geminiModels;
+                    }
+                } catch(e) {
+                    console.error("Failed to fetch dynamic models for Gemini, falling back to hardcoded list.", e.message);
+                    modelsList = geminiModels;
+                }
                 owner = 'google';
                 break;
             case 'openai':
-                modelsList = openAIModels;
+                 try {
+                     const response = await axios.get(HAJI_OPENAI_URL, {
+                        params: { ask: 'hello', model: 'gpt-4', api_key: backendKey, uid: req.authInfo.userId },
+                        timeout: 240000,
+                    });
+                    if (response.data && Array.isArray(response.data.supported_models)) {
+                        modelsList = response.data.supported_models;
+                    } else {
+                        modelsList = openAIModels;
+                    }
+                } catch(e) {
+                    console.error("Failed to fetch dynamic models for OpenAI, falling back to hardcoded list.", e.message);
+                    modelsList = openAIModels;
+                }
                 owner = 'openai';
                 break;
             case 'puter':
+                // Puter has a different logic based on sub-providers, keep as is for now.
                 if (filter === 'puter') {
                     modelsList = puterModels;
                 } else {
