@@ -360,17 +360,6 @@ app.get('/api/puter-families', (req, res) => {
     res.json(families.sort());
 });
 
-app.get('/api/history', authenticateWebSession, async (req, res) => {
-    const userId = req.user.id;
-    try {
-        const historyResult = await db.query('SELECT * FROM chat_history WHERE user_id = $1 ORDER BY timestamp DESC', [userId]);
-        res.json(historyResult.rows);
-    } catch (error) {
-        console.error('Error fetching chat history:', error);
-        return res.status(500).json({ error: 'Failed to retrieve chat history.' });
-    }
-});
-
 // --- API Key Management ---
 app.get('/api/keys', authenticateWebSession, async (req, res) => {
     const userId = req.user.id;
@@ -490,16 +479,6 @@ app.post('/v1/chat/completions', async (req, res) => {
   const { userId } = req.authInfo;
   const { model, messages, stream, max_tokens, google_api_key } = req.body;
 
-  const logChatHistory = async (responseContent) => {
-    const messagesJson = JSON.stringify(messages);
-    const responseJson = JSON.stringify({ role: 'assistant', content: responseContent });
-    try {
-        await db.query('INSERT INTO chat_history (user_id, model, messages, response) VALUES ($1, $2, $3, $4)', [userId, model, messagesJson, responseJson]);
-    } catch (err) {
-        console.error('Failed to log chat history:', err.message);
-    }
-  };
-
   if (!messages || messages.length === 0) {
     return res.status(400).json({ error: 'Invalid messages array.' });
   }
@@ -530,7 +509,6 @@ app.post('/v1/chat/completions', async (req, res) => {
         if (!apiResponse || !apiResponse.answer) { throw new Error('Received an invalid response from the external Puter API for a GPT-5 model.'); }
         const modelUsed = apiResponse.model_used || model;
         const answer = apiResponse.answer;
-        await logChatHistory(answer);
         const completionId = `chatcmpl-${Date.now()}`;
         if (stream) {
             res.setHeader('Content-Type', 'text/event-stream');
@@ -561,7 +539,6 @@ app.post('/v1/chat/completions', async (req, res) => {
       if (!imgbbResponse.data || !imgbbResponse.data.success) { throw new Error('Failed to upload generated image to ImgBB.'); }
       const generatedImageUrl = imgbbResponse.data.data.url;
       const responseContent = `![Generated Image](${generatedImageUrl})`;
-      await logChatHistory(responseContent);
       const completionId = `chatcmpl-gen-${Date.now()}`;
       if (stream) {
         const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
@@ -597,7 +574,6 @@ app.post('/v1/chat/completions', async (req, res) => {
         if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from Gemini API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external Gemini API.'); }
         const modelUsed = apiResponse.model_used || model;
         const answer = apiResponse.answer;
-        await logChatHistory(answer);
         const completionId = `chatcmpl-${Date.now()}`;
         if (stream) {
             res.setHeader('Content-Type', 'text/event-stream');
@@ -620,7 +596,6 @@ app.post('/v1/chat/completions', async (req, res) => {
         if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from Puter API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external Puter API.'); }
         const modelUsed = apiResponse.model_used || model;
         const answer = apiResponse.answer;
-        await logChatHistory(answer);
         const completionId = `chatcmpl-${Date.now()}`;
         if (stream) {
             res.setHeader('Content-Type', 'text/event-stream');
@@ -656,7 +631,6 @@ app.post('/v1/chat/completions', async (req, res) => {
         if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from OpenAI API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external OpenAI API.'); }
         const modelUsed = apiResponse.model_used || model;
         const answer = apiResponse.answer;
-        await logChatHistory(answer);
         const completionId = `chatcmpl-${Date.now()}`;
         if (stream) {
             res.setHeader('Content-Type', 'text/event-stream');
@@ -696,7 +670,6 @@ app.post('/v1/chat/completions', async (req, res) => {
     if (!apiResponse || !apiResponse.answer) { throw new Error('Received an invalid response from the external API.'); }
     const modelUsed = apiResponse.model_used || model;
     const answer = apiResponse.answer;
-    await logChatHistory(answer);
     const completionId = `chatcmpl-${Date.now()}`;
     if (stream) {
       res.setHeader('Content-Type', 'text/event-stream');
