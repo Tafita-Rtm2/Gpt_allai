@@ -22,6 +22,17 @@ document.addEventListener('DOMContentLoaded', () => {
     let allPuterFamilies = [];
 
     // --- Initial Setup ---
+    // Fetch user email from token (a bit of a hack, in real app, get from a /me endpoint)
+    try {
+        const payload = JSON.parse(atob(authToken.split('.')[1]));
+        if (payload.email) {
+            userEmailSpan.textContent = payload.email;
+        }
+    } catch (e) {
+        // If token is not a JWT or something fails, we'll just fetch keys
+        // The /api/keys endpoint will validate the token anyway
+        console.error("Could not decode token:", e);
+    }
     fetchAndDisplayApiKeys();
 
     // --- Event Listeners ---
@@ -39,16 +50,16 @@ document.addEventListener('DOMContentLoaded', () => {
             let logoUrl = '';
             switch (selectedProvider) {
                 case 'claude':
-                    logoUrl = 'assets/claude.jpg';
+                    logoUrl = 'assets/claude.svg'; // Using provided SVG
                     break;
                 case 'gemini':
-                    logoUrl = 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/icons/gear.svg';
+                    logoUrl = 'gemini.svg'; // Using our new SVG
                     break;
                 case 'openai':
                     logoUrl = 'assets/openai.svg';
                     break;
                 case 'puter':
-                    logoUrl = 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/icons/gear.svg';
+                    logoUrl = 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css'; // Placeholder
                     break;
             }
             providerLogo.src = logoUrl;
@@ -72,11 +83,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!selectedProvider) return;
 
         try {
-            generateKeyButton.textContent = 'Generating...';
+            generateKeyButton.innerHTML = '<i class="bi bi-hourglass-split"></i> Generating...';
             generateKeyButton.disabled = true;
 
             const requestBody = { provider: selectedProvider };
-             if (selectedProvider === 'puter') {
+            if (selectedProvider === 'puter') {
                 const selectedFamilyInput = document.querySelector('input[name="puter-family"]:checked');
                 if (selectedFamilyInput && selectedFamilyInput.value) {
                     requestBody.sub_provider = selectedFamilyInput.value;
@@ -104,15 +115,20 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             alert(`Error: ${error.message}`);
         } finally {
-            generateKeyButton.textContent = 'Generate Key';
+            generateKeyButton.innerHTML = '<i class="bi bi-plus-lg"></i> Generate Key';
             generateKeyButton.disabled = !providerDropdown.value;
         }
     });
 
     copyKeyButton.addEventListener('click', () => {
         navigator.clipboard.writeText(apiKeyCode.textContent).then(() => {
-            copyKeyButton.textContent = 'Copied!';
-            setTimeout(() => { copyKeyButton.textContent = 'Copy'; }, 2000);
+            const icon = copyKeyButton.querySelector('i');
+            icon.classList.remove('bi-clipboard');
+            icon.classList.add('bi-check-lg');
+            setTimeout(() => {
+                icon.classList.remove('bi-check-lg');
+                icon.classList.add('bi-clipboard');
+            }, 2000);
         });
     });
 
@@ -184,49 +200,51 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderApiKeys(keys) {
         if (keys.length === 0) {
-            apiKeyHistoryContainer.innerHTML = '<p>No API keys generated yet.</p>';
+            apiKeyHistoryContainer.innerHTML = '<p class="empty-state">No API keys generated yet. Create one above to get started!</p>';
             return;
         }
         apiKeyHistoryContainer.innerHTML = ''; // Clear previous content
 
-        const table = document.createElement('table');
-        table.className = 'api-key-table';
-        table.innerHTML = `
-            <thead>
-                <tr>
-                    <th>Provider</th>
-                    <th>Key (Partial)</th>
-                    <th>Created On</th>
-                    <th>Action</th>
-                </tr>
-            </thead>
-        `;
-        const tbody = document.createElement('tbody');
         keys.forEach(key => {
-            const tr = document.createElement('tr');
             const partialKey = `...${key.api_key.slice(-12)}`;
             const createdDate = new Date(key.created_at).toLocaleDateString();
-
-            tr.innerHTML = `
-                <td>${escapeHtml(key.provider)}</td>
-                <td title="${escapeHtml(key.api_key)}">${escapeHtml(partialKey)}</td>
-                <td>${createdDate}</td>
-                <td><button class="delete-key-btn" data-key-id="${key.id}">Delete</button></td>
+            const keyElement = document.createElement('div');
+            keyElement.className = 'history-item';
+            keyElement.innerHTML = `
+                <div class="history-item-info">
+                    <img src="${getLogoForProvider(key.provider)}" alt="${key.provider}" class="history-provider-logo"/>
+                    <div>
+                        <span class="provider-name">${escapeHtml(key.provider)}</span>
+                        <span class="key-partial" title="${escapeHtml(key.api_key)}">${escapeHtml(partialKey)}</span>
+                    </div>
+                </div>
+                <div class="history-item-details">
+                    <span class="date">Created: ${createdDate}</span>
+                    <button class="delete-key-btn" data-key-id="${key.id}" title="Delete Key"><i class="bi bi-trash3"></i></button>
+                </div>
             `;
-            tbody.appendChild(tr);
+            apiKeyHistoryContainer.appendChild(keyElement);
         });
-        table.appendChild(tbody);
-        apiKeyHistoryContainer.appendChild(table);
 
         // Add event listeners to delete buttons
-        document.querySelectorAll('.delete-key-btn').forEach(button => {
+        apiKeyHistoryContainer.querySelectorAll('.delete-key-btn').forEach(button => {
             button.addEventListener('click', (e) => {
-                const keyId = e.target.getAttribute('data-key-id');
-                if (confirm('Are you sure you want to delete this API key? This action cannot be undone.')) {
+                const keyId = e.currentTarget.getAttribute('data-key-id');
+                if (confirm('Are you sure you want to permanently delete this API key? This action cannot be undone.')) {
                     deleteApiKey(keyId);
                 }
             });
         });
+    }
+
+    function getLogoForProvider(provider) {
+        switch (provider) {
+            case 'claude': return 'assets/claude.svg';
+            case 'gemini': return 'gemini.svg';
+            case 'openai': return 'assets/openai.svg';
+            case 'puter': return 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css'; // Placeholder
+            default: return '';
+        }
     }
 
     async function deleteApiKey(keyId) {
