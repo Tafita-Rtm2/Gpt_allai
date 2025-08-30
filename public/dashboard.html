@@ -30,26 +30,34 @@
         </aside>
         <main class="main-content">
             <header class="main-content-header">
+                <button class="menu-toggle" id="menu-toggle" aria-label="Toggle Menu">
+                    <i class="bi bi-list"></i>
+                </button>
                 <h2>Dashboard Overview</h2>
             </header>
 
             <section class="announcements card">
-                <h3><i class="bi bi-megaphone-fill"></i> Annonces de la Plateforme</h3>
-                <p><strong>Bienvenue sur le nouveau tableau de bord de RTM AI Proxy !</strong> Nous avons entièrement repensé l'interface pour une expérience plus intuitive, puissante et agréable. Votre portail vers l'IA de demain est désormais plus rapide et plus beau.</p>
-                <h4><i class="bi bi-stars"></i> Explorez les Modèles d'Exception</h4>
-                <p>Votre clé API unique vous donne accès à un arsenal d'intelligences artificielles de premier plan :</p>
-                <ul>
-                    <li><strong>OpenAI :</strong> Accédez à la puissance de GPT-4, GPT-4o et d'autres modèles de pointe pour des tâches complexes de raisonnement, de génération de texte et de code.</li>
-                    <li><strong>Gemini :</strong> Profitez de la vitesse et de la polyvalence de Gemini 1.5 Pro et Flash, parfaits pour les applications multimodales et les interactions en temps réel.</li>
-                    <li><strong>Claude :</strong> Utilisez les modèles de Claude 3 (Opus, Sonnet, Haiku) pour une analyse de texte approfondie, une meilleure compréhension du contexte et des conversations plus naturelles.</li>
-                    <li><strong>Puter :</strong> Découvrez un écosystème de modèles spécialisés et open-source pour des tâches de niche, de la génération de code à la traduction.</li>
-                </ul>
-                <p>Consultez notre <a href="#">documentation complète</a> pour des guides d'intégration détaillés et des exemples de code.</p>
+                <h3><i class="bi bi-megaphone-fill"></i> Annonces de la Plateforme 📢</h3>
+                <p><strong>Bienvenue sur le nouveau tableau de bord de RTM AI Proxy !</strong> Nous avons entièrement repensé l'interface pour une expérience plus intuitive, puissante et agréable. Votre portail vers l'IA de demain est désormais plus rapide et plus beau. ✨</p>
+                <h4><i class="bi bi-stars"></i> Explorez un Univers de Modèles d'IA</h4>
+                <p>Votre clé API unique débloque un accès sans précédent à l'écosystème mondial de l'IA. Voici un aperçu des familles de modèles que vous pouvez piloter :</p>
+                <div class="model-list">
+                    <p><strong>OpenAI:</strong> GPT-5 Series, GPT-4o, GPT-4 Turbo, GPT-3.5</p>
+                    <p><strong>Google:</strong> Gemini 2.5 Pro, Gemini 1.5 Pro & Flash, Gemma Series</p>
+                    <p><strong>Anthropic:</strong> Claude 4.1 Opus, Claude 3.5 Sonnet, Haiku</p>
+                    <p><strong>Meta:</strong> Llama 3.1 Series</p>
+                    <p><strong>Mistral AI:</strong> Mistral Large, Mixtral, Codestral</p>
+                    <p><strong>DeepSeek:</strong> DeepSeek V2, DeepSeek Coder</p>
+                    <p><strong>Grok AI:</strong> Grok-2, Grok-1.5</p>
+                    <p><strong>Qwen (Alibaba):</strong> Qwen 2.5 Series</p>
+                    <p>...et bien d'autres modèles spécialisés via Puter !</p>
+                </div>
+                <p class="docs-link">Consultez notre <a href="#">documentation complète</a> pour la liste exhaustive et les guides d'intégration.</p>
             </section>
 
             <div class="dashboard-grid">
                 <section class="card api-generator">
-                    <h2><i class="bi bi-key-fill"></i> Generate New API Key</h2>
+                    <h2><i class="bi bi-key-fill"></i> Générer une Nouvelle Clé API 🔑</h2>
                     <div class="generation-form">
                         <div class="form-group">
                             <label for="provider-dropdown">Select a Provider</label>
@@ -83,7 +91,7 @@
                 </section>
 
                 <section class="card api-key-history">
-                    <h2><i class="bi bi-clock-history"></i> API Key History</h2>
+                    <h2><i class="bi bi-clock-history"></i> Historique des Clés API 📜</h2>
                     <div id="api-key-history-container">
                         <p>Loading API keys...</p>
                     </div>
