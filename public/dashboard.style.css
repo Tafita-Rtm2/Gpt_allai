@@ -1,14 +1,14 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700&display=swap');
 
 :root {
-    --primary-color: #007bff;
-    --primary-hover: #0056b3;
-    --background-color: #f4f7f9;
+    --primary-color: #6a5af9;
+    --primary-hover: #5a4af9;
+    --background-color: #f0f2f5;
     --card-background: #ffffff;
     --text-color: #333;
     --label-color: #555;
     --border-color: #e0e0e0;
-    --font-family: 'Inter', sans-serif;
+    --font-family: 'Poppins', sans-serif;
 }
 
 body {
@@ -29,10 +29,15 @@ body {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .dashboard-header h1 {
     margin: 0;
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--primary-color);
 }
 
 .dashboard-header #user-email {
@@ -63,7 +68,7 @@ body {
 
 @media (min-width: 992px) {
     .dashboard-main {
-        grid-template-columns: 400px 1fr;
+        grid-template-columns: 450px 1fr;
     }
 }
 
@@ -76,9 +81,15 @@ body {
 
 .card h2 {
     margin-top: 0;
-    border-bottom: 1px solid var(--border-color);
-    padding-bottom: 1rem;
     margin-bottom: 1.5rem;
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+}
+
+.card h2 i {
+    margin-right: 0.75rem;
+    color: var(--primary-color);
 }
 
 .form-group {
@@ -100,6 +111,19 @@ select, input[type="search"] {
     font-size: 1rem;
 }
 
+.provider-select-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.provider-logo {
+    position: absolute;
+    right: 10px;
+    height: 24px;
+    width: 24px;
+}
+
 #generate-key-button {
     width: 100%;
     padding: 0.85rem;
@@ -114,7 +138,7 @@ select, input[type="search"] {
 }
 
 #generate-key-button:disabled {
-    background-color: #a0c7ff;
+    background-color: #a9a1f7;
     cursor: not-allowed;
 }
 
@@ -124,6 +148,7 @@ select, input[type="search"] {
 
 .key-box {
     display: flex;
+    align-items: center;
     background-color: var(--background-color);
     padding: 0.5rem;
     border-radius: 4px;
@@ -142,6 +167,7 @@ select, input[type="search"] {
     cursor: pointer;
     border-radius: 4px;
     margin-left: 0.5rem;
+    padding: 0.5rem;
 }
 
 .hidden {
@@ -149,50 +175,55 @@ select, input[type="search"] {
 }
 
 /* History Section */
-#history-container {
+#api-key-history-container {
     max-height: 600px;
     overflow-y: auto;
     padding-right: 1rem;
 }
 
 .history-item {
-    margin-bottom: 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
     border-bottom: 1px solid var(--border-color);
-    padding-bottom: 1.5rem;
 }
 
 .history-item:last-child {
     border-bottom: none;
 }
 
-.history-meta {
-    font-size: 0.8rem;
-    color: var(--label-color);
-    margin-bottom: 1rem;
+.history-item-info {
+    flex-grow: 1;
 }
 
-.history-meta strong {
-    color: var(--text-color);
-}
-
-.history-convo {
-    font-size: 0.9rem;
-}
-
-.history-convo .user, .history-convo .assistant {
-    margin-bottom: 1rem;
-}
-
-.history-convo .role {
+.history-item-info .provider {
     font-weight: 700;
     margin-bottom: 0.25rem;
-    display: block;
 }
 
-.history-convo pre {
-    white-space: pre-wrap;
-    background-color: #f8f9fa;
-    padding: 1rem;
-    border-radius: 4px;
-    border: 1px solid var(--border-color);
+.history-item-info .key {
+    font-family: monospace;
+    font-size: 0.9rem;
+    color: var(--label-color);
+    word-break: break-all;
+}
+
+.history-item-info .date {
+    font-size: 0.8rem;
+    color: #999;
+}
+
+.delete-key-button {
+    background-color: #f44336;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 30px;
+    text-align: center;
 }
