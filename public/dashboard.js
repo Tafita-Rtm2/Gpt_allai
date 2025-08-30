@@ -21,6 +21,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const puterFamiliesList = document.getElementById('puter-families-list');
     let allPuterFamilies = [];
 
+    // Mobile sidebar toggle
+    const menuToggle = document.getElementById('menu-toggle');
+    const sidebar = document.querySelector('.sidebar');
+
     // --- Initial Setup ---
     // Fetch user email from token (a bit of a hack, in real app, get from a /me endpoint)
     try {
@@ -36,6 +40,10 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchAndDisplayApiKeys();
 
     // --- Event Listeners ---
+    menuToggle.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+
     logoutButton.addEventListener('click', () => {
         localStorage.removeItem('authToken');
         window.location.href = '/index.html';
@@ -50,16 +58,16 @@ document.addEventListener('DOMContentLoaded', () => {
             let logoUrl = '';
             switch (selectedProvider) {
                 case 'claude':
-                    logoUrl = 'assets/claude.svg'; // Using provided SVG
+                    logoUrl = 'assets/claude.svg';
                     break;
                 case 'gemini':
-                    logoUrl = 'gemini.svg'; // Using our new SVG
+                    logoUrl = 'assets/gemini.svg';
                     break;
                 case 'openai':
                     logoUrl = 'assets/openai.svg';
                     break;
                 case 'puter':
-                    logoUrl = 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css'; // Placeholder
+                    logoUrl = ''; // No logo for this one
                     break;
             }
             providerLogo.src = logoUrl;
@@ -240,9 +248,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function getLogoForProvider(provider) {
         switch (provider) {
             case 'claude': return 'assets/claude.svg';
-            case 'gemini': return 'gemini.svg';
+            case 'gemini': return 'assets/gemini.svg';
             case 'openai': return 'assets/openai.svg';
-            case 'puter': return 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css'; // Placeholder
+            case 'puter': return ''; // No logo for this one
             default: return '';
         }
     }
