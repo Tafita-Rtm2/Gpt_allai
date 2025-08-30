@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const apiKeyDisplay = document.getElementById('api-key-display');
     const apiKeyCode = document.getElementById('api-key-code');
     const copyKeyButton = document.getElementById('copy-key-button');
-    const historyContainer = document.getElementById('history-container');
+    const apiKeyHistoryContainer = document.getElementById('api-key-history-container');
 
     // Elements for Puter provider filter (optional)
     const puterFilterSection = document.getElementById('puter-filter-section');
@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let allPuterFamilies = [];
 
     // --- Initial Setup ---
-    fetchAndDisplayHistory();
+    fetchAndDisplayApiKeys();
 
     // --- Event Listeners ---
     logoutButton.addEventListener('click', () => {
@@ -74,6 +74,9 @@ document.addEventListener('DOMContentLoaded', () => {
             apiKeyCode.textContent = data.apiKey;
             apiKeyDisplay.classList.remove('hidden');
 
+            // Refresh the API key list
+            fetchAndDisplayApiKeys();
+
         } catch (error) {
             alert(`Error: ${error.message}`);
         } finally {
@@ -90,78 +93,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- Functions ---
-    async function fetchAndDisplayHistory() {
-        try {
-            const response = await fetch('/api/history', {
-                headers: { 'Authorization': `Bearer ${authToken}` }
-            });
-            if (!response.ok) {
-                 if (response.status === 401 || response.status === 403) {
-                    localStorage.removeItem('authToken');
-                    window.location.href = '/index.html';
-                }
-                throw new Error('Could not fetch history.');
-            }
-            const history = await response.json();
-            renderHistory(history);
-        } catch (error) {
-            historyContainer.innerHTML = `<p style="color: red;">${error.message}</p>`;
-        }
-    }
-
-    function renderHistory(history) {
-        if (history.length === 0) {
-            historyContainer.innerHTML = '<p>No chat history found.</p>';
-            return;
-        }
-        historyContainer.innerHTML = '';
-        history.forEach(item => {
-            const itemDiv = document.createElement('div');
-            itemDiv.className = 'history-item';
-
-            const date = new Date(item.timestamp).toLocaleString();
-            const model = item.model;
-
-            let userMessage = 'No user message found.';
-            try {
-                const messages = JSON.parse(item.messages);
-                const userMsg = messages.find(m => m.role === 'user');
-                if (userMsg) {
-                    if (typeof userMsg.content === 'string') {
-                        userMessage = userMsg.content;
-                    } else if (Array.isArray(userMsg.content)) {
-                        userMessage = userMsg.content.find(p => p.type === 'text')?.text || 'Image content';
-                    }
-                }
-            } catch (e) { /* ignore parse error */ }
-
-            let assistantResponse = 'No response found.';
-            try {
-                const response = JSON.parse(item.response);
-                assistantResponse = response.content;
-            } catch(e) { /* ignore parse error */ }
-
-
-            itemDiv.innerHTML = `
-                <div class="history-meta">
-                    <span><strong>Date:</strong> ${date}</span> |
-                    <span><strong>Model:</strong> ${model}</span>
-                </div>
-                <div class="history-convo">
-                    <div class="user">
-                        <span class="role">You:</span>
-                        <pre>${escapeHtml(userMessage)}</pre>
-                    </div>
-                    <div class="assistant">
-                        <span class="role">Assistant:</span>
-                        <pre>${escapeHtml(assistantResponse)}</pre>
-                    </div>
-                </div>
-            `;
-            historyContainer.appendChild(itemDiv);
-        });
-    }
-
     async function fetchAndDisplayPuterFamilies() {
         try {
             puterFamiliesList.innerHTML = '<p>Loading...</p>';
@@ -208,5 +139,88 @@ document.addEventListener('DOMContentLoaded', () => {
              .replace(/>/g, "&gt;")
              .replace(/"/g, "&quot;")
              .replace(/'/g, "&#039;");
+    }
+
+    // --- API Key History Functions ---
+    async function fetchAndDisplayApiKeys() {
+        try {
+            const response = await fetch('/api/keys', {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            if (!response.ok) {
+                if (response.status === 401 || response.status === 403) {
+                    localStorage.removeItem('authToken');
+                    window.location.href = '/index.html';
+                }
+                throw new Error('Could not fetch API keys.');
+            }
+            const keys = await response.json();
+            renderApiKeys(keys);
+        } catch (error) {
+            apiKeyHistoryContainer.innerHTML = `<p style="color: red;">${error.message}</p>`;
+        }
+    }
+
+    function renderApiKeys(keys) {
+        if (keys.length === 0) {
+            apiKeyHistoryContainer.innerHTML = '<p>No API keys generated yet.</p>';
+            return;
+        }
+        apiKeyHistoryContainer.innerHTML = ''; // Clear previous content
+
+        const table = document.createElement('table');
+        table.className = 'api-key-table';
+        table.innerHTML = `
+            <thead>
+                <tr>
+                    <th>Provider</th>
+                    <th>Key (Partial)</th>
+                    <th>Created On</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+        `;
+        const tbody = document.createElement('tbody');
+        keys.forEach(key => {
+            const tr = document.createElement('tr');
+            const partialKey = `...${key.api_key.slice(-12)}`;
+            const createdDate = new Date(key.created_at).toLocaleDateString();
+
+            tr.innerHTML = `
+                <td>${escapeHtml(key.provider)}</td>
+                <td title="${escapeHtml(key.api_key)}">${escapeHtml(partialKey)}</td>
+                <td>${createdDate}</td>
+                <td><button class="delete-key-btn" data-key-id="${key.id}">Delete</button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        apiKeyHistoryContainer.appendChild(table);
+
+        // Add event listeners to delete buttons
+        document.querySelectorAll('.delete-key-btn').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const keyId = e.target.getAttribute('data-key-id');
+                if (confirm('Are you sure you want to delete this API key? This action cannot be undone.')) {
+                    deleteApiKey(keyId);
+                }
+            });
+        });
+    }
+
+    async function deleteApiKey(keyId) {
+        try {
+            const response = await fetch(`/api/keys/${keyId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Failed to delete key.');
+
+            // Refresh the list after successful deletion
+            fetchAndDisplayApiKeys();
+        } catch (error) {
+            alert(`Error: ${error.message}`);
+        }
     }
 });

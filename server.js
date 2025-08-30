@@ -8,9 +8,27 @@ const FormData = require('form-data');
 const { db, initializeDatabase } = require('./database');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const cluster = require('cluster');
+const os = require('os');
 
-const app = express();
-app.use(express.json({ limit: '50mb' }));
+const numCPUs = os.cpus().length;
+
+if (cluster.isPrimary) {
+    console.log(`Primary ${process.pid} is running`);
+
+    // Fork workers.
+    for (let i = 0; i < numCPUs; i++) {
+        cluster.fork();
+    }
+
+    cluster.on('exit', (worker, code, signal) => {
+        console.log(`worker ${worker.process.pid} died`);
+        console.log("Forking a new worker");
+        cluster.fork();
+    });
+} else {
+    const app = express();
+    app.use(express.json({ limit: '50mb' }));
 app.use(cors());
 app.use(express.static('public'));
 
@@ -362,6 +380,33 @@ app.get('/api/history', authenticateWebSession, (req, res) => {
     });
 });
 
+// --- API Key Management ---
+app.get('/api/keys', authenticateWebSession, (req, res) => {
+    const userId = req.user.id;
+    db.all('SELECT id, provider, api_key, created_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC', [userId], (err, rows) => {
+        if (err) {
+            console.error('Error fetching API keys:', err.message);
+            return res.status(500).json({ error: 'Failed to retrieve API keys.' });
+        }
+        res.json(rows);
+    });
+});
+
+app.delete('/api/keys/:id', authenticateWebSession, (req, res) => {
+    const keyId = req.params.id;
+    const userId = req.user.id;
+    db.run('DELETE FROM api_keys WHERE id = ? AND user_id = ?', [keyId, userId], function(err) {
+        if (err) {
+            console.error('Error deleting API key:', err.message);
+            return res.status(500).json({ error: 'Failed to delete API key.' });
+        }
+        if (this.changes === 0) {
+            return res.status(404).json({ error: 'API key not found or you do not have permission to delete it.' });
+        }
+        res.status(200).json({ message: 'API key deleted successfully.' });
+    });
+});
+
 app.get('/v1/models', async (req, res) => {
     try {
         const { filter, providerContext } = req.authInfo;
@@ -371,6 +416,7 @@ app.get('/v1/models', async (req, res) => {
             case 'claude':
                 const response = await axios.get(HAJI_ANTHROPIC_URL, {
                     params: { ask: 'hello', model: 'claude-3-opus-20240229', api_key: HAJI_API_KEY, uid: '1' },
+                    timeout: 240000
                 });
                 if (!response.data.supported_models || !Array.isArray(response.data.supported_models)) {
                     throw new Error('Could not retrieve supported models from Claude API.');
@@ -471,14 +517,14 @@ app.post('/v1/chat/completions', async (req, res) => {
       const prompt = ask.substring(triggerKeyword.length).trim();
       let imageResponse;
       if (openAIModels.includes(model)) {
-        imageResponse = await axios.get(HAJI_IMAGEN_URL, { params: { prompt: prompt, model: 'dall-e-3', api_key: HAJI_OPENAI_API_KEY, }, responseType: 'arraybuffer', });
+        imageResponse = await axios.get(HAJI_IMAGEN_URL, { params: { prompt: prompt, model: 'dall-e-3', api_key: HAJI_OPENAI_API_KEY, }, responseType: 'arraybuffer', timeout: 240000 });
       } else {
-        imageResponse = await axios.get(HAJI_FLUX_URL, { params: { prompt, api_key: HAJI_API_KEY, uid }, responseType: 'arraybuffer', });
+        imageResponse = await axios.get(HAJI_FLUX_URL, { params: { prompt, api_key: HAJI_API_KEY, uid }, responseType: 'arraybuffer', timeout: 240000 });
       }
       const base64Data = Buffer.from(imageResponse.data, 'binary').toString('base64');
       const form = new FormData();
       form.append('image', base64Data);
-      const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders(), });
+      const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders(), timeout: 240000 });
       if (!imgbbResponse.data || !imgbbResponse.data.success) { throw new Error('Failed to upload generated image to ImgBB.'); }
       const generatedImageUrl = imgbbResponse.data.data.url;
       const responseContent = `![Generated Image](${generatedImageUrl})`;
@@ -505,7 +551,7 @@ app.post('/v1/chat/completions', async (req, res) => {
                 const base64Data = imageUrl.replace(/^data:image\/[a-z]+;base64,/, "");
                 const form = new FormData();
                 form.append('image', base64Data);
-                const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders() });
+                const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders(), timeout: 240000 });
                 if (imgbbResponse.data && imgbbResponse.data.success) { finalImageUrl = imgbbResponse.data.data.url; } else { throw new Error('Failed to upload image to ImgBB.'); }
             } else {
                 finalImageUrl = imageUrl;
@@ -564,7 +610,7 @@ app.post('/v1/chat/completions', async (req, res) => {
                 const base64Data = imageUrl.replace(/^data:image\/[a-z]+;base64,/, "");
                 const form = new FormData();
                 form.append('image', base64Data);
-                const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders() });
+                const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders(), timeout: 240000 });
                 if (imgbbResponse.data && imgbbResponse.data.success) { finalImageUrl = imgbbResponse.data.data.url; } else { throw new Error('Failed to upload image to ImgBB.'); }
             } else {
                 finalImageUrl = imageUrl;
@@ -600,7 +646,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         const base64Data = imageUrl.replace(/^data:image\/[a-z]+;base64,/, "");
         const form = new FormData();
         form.append('image', base64Data);
-        const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders() });
+        const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders(), timeout: 240000 });
         if (imgbbResponse.data && imgbbResponse.data.success) {
           finalImageUrl = imgbbResponse.data.data.url;
         } else {
@@ -686,3 +732,4 @@ app.listen(PORT, () => {
     console.warn('The application will likely fail without them.\n');
   }
 });
+}
