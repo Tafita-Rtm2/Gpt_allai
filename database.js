@@ -1,65 +1,63 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const { Pool } = require('pg');
+require('dotenv').config();
 
-const dbPath = path.join(__dirname, 'rtm_proxy.db');
-const db = new sqlite3.Database(dbPath, (err) => {
-    if (err) {
-        console.error('Error opening database:', err.message);
-    } else {
-        console.log('Connected to the SQLite database.');
-    }
+// The user provided the connection string directly.
+// In a real-world scenario, this should come from environment variables.
+const connectionString = 'postgresql://neondb_owner:npg_Ba8KmGy1fMnv@ep-plain-hall-adyc959q-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require';
+
+const pool = new Pool({
+    connectionString,
+    ssl: {
+        rejectUnauthorized: false,
+    },
 });
 
-const initializeDatabase = () => {
-    db.serialize(() => {
-        // User table
-        db.run(`
+pool.on('connect', () => {
+    console.log('Connected to the PostgreSQL database.');
+});
+
+const initializeDatabase = async () => {
+    try {
+        await pool.query(`
             CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 email TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
                 auth_token TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             )
-        `, (err) => {
-            if (err) console.error('Error creating users table:', err.message);
-            else console.log('Users table is ready.');
-        });
+        `);
+        console.log('Users table is ready.');
 
-        // API Keys table
-        db.run(`
+        await pool.query(`
             CREATE TABLE IF NOT EXISTS api_keys (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 provider TEXT NOT NULL,
                 api_key TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id)
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             )
-        `, (err) => {
-            if (err) console.error('Error creating api_keys table:', err.message);
-            else console.log('API keys table is ready.');
-        });
+        `);
+        console.log('API keys table is ready.');
 
-        // Chat History table
-        db.run(`
+        await pool.query(`
             CREATE TABLE IF NOT EXISTS chat_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 model TEXT NOT NULL,
                 messages TEXT NOT NULL,
                 response TEXT NOT NULL,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id)
+                timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             )
-        `, (err) => {
-            if (err) console.error('Error creating chat_history table:', err.message);
-            else console.log('Chat history table is ready.');
-        });
-    });
+        `);
+        console.log('Chat history table is ready.');
+
+    } catch (err) {
+        console.error('Error initializing database:', err.stack);
+    }
 };
 
 module.exports = {
-    db,
+    db: pool, // We'll use the pool as our db object
     initializeDatabase
 };
