@@ -33,6 +33,30 @@ document.addEventListener('DOMContentLoaded', () => {
     providerDropdown.addEventListener('change', async () => {
         const selectedProvider = providerDropdown.value;
         generateKeyButton.disabled = !selectedProvider;
+
+        const providerLogo = document.getElementById('provider-logo');
+        if (selectedProvider) {
+            let logoUrl = '';
+            switch (selectedProvider) {
+                case 'claude':
+                    logoUrl = 'assets/claude.jpg';
+                    break;
+                case 'gemini':
+                    logoUrl = 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/icons/gear.svg';
+                    break;
+                case 'openai':
+                    logoUrl = 'assets/openai.svg';
+                    break;
+                case 'puter':
+                    logoUrl = 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/icons/gear.svg';
+                    break;
+            }
+            providerLogo.src = logoUrl;
+            providerLogo.classList.remove('hidden');
+        } else {
+            providerLogo.classList.add('hidden');
+        }
+
         if (selectedProvider === 'puter') {
             puterFilterSection.classList.remove('hidden');
             if (allPuterFamilies.length === 0) {
