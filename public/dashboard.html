@@ -4,62 +4,84 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - RTM AI Proxy</title>
-    <link rel="stylesheet" href="dashboard.style.css">
-    <link href="httpshttps://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="futuristic-style.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
 </head>
 <body>
     <div class="dashboard-container">
-        <header class="dashboard-header">
-            <h1>RTM AI Proxy</h1>
-            <div>
-                <span id="user-email"></span>
-                <button id="logout-button">Logout</button>
+        <aside class="sidebar">
+            <header class="sidebar-header">
+                <h1 class="logo">RTM AI</h1>
+            </header>
+            <div class="user-profile">
+                <i class="bi bi-person-circle"></i>
+                <span id="user-email">Loading...</span>
             </div>
-        </header>
+            <nav class="main-nav">
+                <a href="#" class="nav-item active"><i class="bi bi-grid-fill"></i> Dashboard</a>
+                <a href="#" class="nav-item"><i class="bi bi-book"></i> Docs</a>
+                <a href="#" class="nav-item"><i class="bi bi-gear"></i> Settings</a>
+            </nav>
+            <footer class="sidebar-footer">
+                <button id="logout-button" class="btn-logout">
+                    <i class="bi bi-box-arrow-left"></i> Logout
+                </button>
+            </footer>
+        </aside>
+        <main class="main-content">
+            <header class="main-content-header">
+                <h2>Dashboard Overview</h2>
+            </header>
 
-        <main class="dashboard-main">
-            <section class="card api-generator">
-                <h2><i class="bi bi-key-fill"></i> Generate New API Key</h2>
-                <div class="generation-form">
-                    <div class="form-group">
-                        <label for="provider-dropdown">Select a Provider</label>
-                        <div class="provider-select-container">
-                            <select id="provider-dropdown">
-                                <option value="" selected>-- Please choose --</option>
-                                <option value="claude">Claude</option>
-                                <option value="gemini">Gemini</option>
-                                <option value="openai">OpenAI</option>
-                                <option value="puter">Puter</option>
-                            </select>
-                            <img id="provider-logo" src="" alt="Provider Logo" class="provider-logo hidden">
+            <section class="announcements card">
+                <h3><i class="bi bi-megaphone-fill"></i> Platform Announcements</h3>
+                <p><strong>Welcome to the new RTM AI Proxy!</strong> We've overhauled the interface for a more intuitive and powerful experience. You now have access to cutting-edge models from OpenAI, Gemini, Claude, and specialized providers via Puter. Explore the model documentation <a href="#">here</a>.</p>
+            </section>
+
+            <div class="dashboard-grid">
+                <section class="card api-generator">
+                    <h2><i class="bi bi-key-fill"></i> Generate New API Key</h2>
+                    <div class="generation-form">
+                        <div class="form-group">
+                            <label for="provider-dropdown">Select a Provider</label>
+                            <div class="provider-select-container">
+                                <select id="provider-dropdown">
+                                    <option value="" selected>-- Please choose --</option>
+                                    <option value="claude">Claude</option>
+                                    <option value="gemini">Gemini</option>
+                                    <option value="openai">OpenAI</option>
+                                    <option value="puter">Puter</option>
+                                </select>
+                                <img id="provider-logo" src="" alt="Provider Logo" class="provider-logo hidden">
+                            </div>
+                        </div>
+                        <div id="puter-filter-section" class="hidden form-group">
+                            <label for="puter-search">Optional: Filter Puter Models</label>
+                            <input type="search" id="puter-search" placeholder="e.g., 'anthropic/claude-3.5-sonnet'">
+                            <div id="puter-families-list"></div>
+                        </div>
+                        <button id="generate-key-button" class="btn-primary" disabled>
+                            <i class="bi bi-plus-lg"></i> Generate Key
+                        </button>
+                    </div>
+                    <div id="api-key-display" class="hidden">
+                        <h3>Your New Key:</h3>
+                        <div class="key-box">
+                            <code id="api-key-code"></code>
+                            <button id="copy-key-button" title="Copy to clipboard"><i class="bi bi-clipboard"></i></button>
                         </div>
                     </div>
-                    <div id="puter-filter-section" class="hidden form-group">
-                        <label for="puter-search">Optional: Filter Puter Models</label>
-                        <input type="search" id="puter-search" placeholder="Search for a model family...">
-                        <div id="puter-families-list"></div>
-                    </div>
-                    <button id="generate-key-button" disabled>Generate Key</button>
-                </div>
-                <div id="api-key-display" class="hidden">
-                    <h3>Your New Key:</h3>
-                    <div class="key-box">
-                        <code id="api-key-code"></code>
-                        <button id="copy-key-button"><i class="bi bi-clipboard"></i></button>
-                    </div>
-                </div>
-            </section>
+                </section>
 
-            <section class="card api-key-history">
-                <h2><i class="bi bi-clock-history"></i> API Key History</h2>
-                <div id="api-key-history-container">
-                    <p>Loading API keys...</p>
-                    <!-- API key history will be injected here -->
-                </div>
-            </section>
+                <section class="card api-key-history">
+                    <h2><i class="bi bi-clock-history"></i> API Key History</h2>
+                    <div id="api-key-history-container">
+                        <p>Loading API keys...</p>
+                    </div>
+                </section>
+            </div>
         </main>
     </div>
-
     <script src="dashboard.js"></script>
 </body>
 </html>
