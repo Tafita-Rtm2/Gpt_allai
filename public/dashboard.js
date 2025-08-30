@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- DOM Elements ---
-    const userEmailSpan = document.getElementById('user-email'); // Will need to fetch this
+    const userEmailSpan = document.getElementById('user-email');
     const logoutButton = document.getElementById('logout-button');
     const providerDropdown = document.getElementById('provider-dropdown');
     const generateKeyButton = document.getElementById('generate-key-button');
@@ -106,9 +106,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderPuterFamilies(families) {
-        // This function is identical to the one in the old script.js
-        // For brevity, it is not repeated here but would be included in a real implementation.
-        // It renders radio buttons for each Puter model family.
         puterFamiliesList.innerHTML = '';
         const allLabel = document.createElement('label');
         const allRadio = document.createElement('input');

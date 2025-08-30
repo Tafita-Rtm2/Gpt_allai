@@ -48,27 +48,17 @@ app.post('/auth/register', async (req, res) => {
     }
 
     try {
-        const existingUser = await new Promise((resolve, reject) => {
-            db.get('SELECT email FROM users WHERE email = ?', [email], (err, row) => {
-                if (err) reject(err);
-                resolve(row);
-            });
-        });
-
-        if (existingUser) {
+        const existingUserResult = await db.query('SELECT email FROM users WHERE email = $1', [email]);
+        if (existingUserResult.rows.length > 0) {
             return res.status(409).json({ error: 'User with this email already exists.' });
         }
 
         const saltRounds = 10;
         const passwordHash = await bcrypt.hash(password, saltRounds);
 
-        db.run('INSERT INTO users (email, password_hash) VALUES (?, ?)', [email, passwordHash], function(err) {
-            if (err) {
-                console.error('Error registering user:', err.message);
-                return res.status(500).json({ error: 'Failed to register user.' });
-            }
-            res.status(201).json({ message: 'User registered successfully.' });
-        });
+        await db.query('INSERT INTO users (email, password_hash) VALUES ($1, $2)', [email, passwordHash]);
+        res.status(201).json({ message: 'User registered successfully.' });
+
     } catch (error) {
         console.error('Registration error:', error);
         res.status(500).json({ error: 'An internal server error occurred during registration.' });
@@ -76,21 +66,19 @@ app.post('/auth/register', async (req, res) => {
 });
 
 // User Login
-app.post('/auth/login', (req, res) => {
+app.post('/auth/login', async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
         return res.status(400).json({ error: 'Email and password are required.' });
     }
 
-    db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
-        if (err) {
-            console.error('Database error during login:', err.message);
-            return res.status(500).json({ error: 'Internal server error.' });
-        }
-        if (!user) {
+    try {
+        const userResult = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+        if (userResult.rows.length === 0) {
             return res.status(401).json({ error: 'Invalid credentials.' });
         }
+        const user = userResult.rows[0];
 
         const isMatch = await bcrypt.compare(password, user.password_hash);
         if (!isMatch) {
@@ -98,14 +86,13 @@ app.post('/auth/login', (req, res) => {
         }
 
         const authToken = crypto.randomBytes(30).toString('hex');
-        db.run('UPDATE users SET auth_token = ? WHERE id = ?', [authToken, user.id], (updateErr) => {
-            if (updateErr) {
-                console.error('Failed to update auth token:', updateErr.message);
-                return res.status(500).json({ error: 'Failed to log in.' });
-            }
-            res.json({ message: 'Login successful.', token: authToken });
-        });
-    });
+        await db.query('UPDATE users SET auth_token = $1 WHERE id = $2', [authToken, user.id]);
+        res.json({ message: 'Login successful.', token: authToken });
+
+    } catch (error) {
+        console.error('Database error during login:', error);
+        return res.status(500).json({ error: 'Internal server error.' });
+    }
 });
 
 // --- CONFIGURATION ---
@@ -278,20 +265,19 @@ const imageGenerationKeywords = [
     'dessine une image de', 'dessine image de', 'dessine une image', 'dessine image', 'dessine',
 ];
 
-const authenticateApiKey = (req, res, next) => {
+const authenticateApiKey = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({ error: 'Authorization header is missing or malformed.' });
     }
     const compoundKey = authHeader.split(' ')[1];
 
-    db.get('SELECT user_id, provider FROM api_keys WHERE api_key = ?', [compoundKey], (err, keyRecord) => {
-        if (err) {
-            return res.status(500).json({ error: 'Database error during API key authentication.' });
-        }
-        if (!keyRecord) {
+    try {
+        const keyResult = await db.query('SELECT user_id, provider FROM api_keys WHERE api_key = $1', [compoundKey]);
+        if (keyResult.rows.length === 0) {
             return res.status(403).json({ error: 'Invalid API key.' });
         }
+        const keyRecord = keyResult.rows[0];
 
         const keyParts = compoundKey.split('--');
         const filter = keyParts[0];
@@ -302,29 +288,33 @@ const authenticateApiKey = (req, res, next) => {
             filter: filter,
         };
         next();
-    });
+    } catch (error) {
+        console.error('Database error during API key authentication:', error);
+        return res.status(500).json({ error: 'Database error during API key authentication.' });
+    }
 };
 
 // Middleware to protect routes that require a logged-in user session
-const authenticateWebSession = (req, res, next) => {
+const authenticateWebSession = async (req, res, next) => {
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) {
         return res.status(401).json({ error: 'No authentication token provided.' });
     }
 
-    db.get('SELECT id, email FROM users WHERE auth_token = ?', [token], (err, user) => {
-        if (err) {
-            return res.status(500).json({ error: 'Database error during authentication.' });
-        }
-        if (!user) {
+    try {
+        const userResult = await db.query('SELECT id, email FROM users WHERE auth_token = $1', [token]);
+        if (userResult.rows.length === 0) {
             return res.status(403).json({ error: 'Invalid or expired token.' });
         }
-        req.user = user; // Add user info to the request object
+        req.user = userResult.rows[0];
         next();
-    });
+    } catch (error) {
+        console.error('Database error during authentication:', error);
+        return res.status(500).json({ error: 'Database error during authentication.' });
+    }
 };
 
-app.post('/api/generate-key', authenticateWebSession, (req, res) => {
+app.post('/api/generate-key', authenticateWebSession, async (req, res) => {
     const { provider, sub_provider } = req.body;
     let backendKey;
     let prefix = provider;
@@ -352,14 +342,13 @@ app.post('/api/generate-key', authenticateWebSession, (req, res) => {
     }
     const compoundKey = `${prefix}--${backendKey}`;
 
-    // Save the new key to the database
-    db.run('INSERT INTO api_keys (user_id, provider, api_key) VALUES (?, ?, ?)', [req.user.id, provider, compoundKey], function(err) {
-        if (err) {
-            console.error('Error saving API key:', err.message);
-            return res.status(500).json({ error: 'Failed to save API key.' });
-        }
+    try {
+        await db.query('INSERT INTO api_keys (user_id, provider, api_key) VALUES ($1, $2, $3)', [req.user.id, provider, compoundKey]);
         res.json({ apiKey: compoundKey });
-    });
+    } catch (error) {
+        console.error('Error saving API key:', error);
+        return res.status(500).json({ error: 'Failed to save API key.' });
+    }
 });
 
 app.use('/v1', authenticateApiKey);
@@ -369,42 +358,42 @@ app.get('/api/puter-families', (req, res) => {
     res.json(families.sort());
 });
 
-app.get('/api/history', authenticateWebSession, (req, res) => {
+app.get('/api/history', authenticateWebSession, async (req, res) => {
     const userId = req.user.id;
-    db.all('SELECT * FROM chat_history WHERE user_id = ? ORDER BY timestamp DESC', [userId], (err, rows) => {
-        if (err) {
-            console.error('Error fetching chat history:', err.message);
-            return res.status(500).json({ error: 'Failed to retrieve chat history.' });
-        }
-        res.json(rows);
-    });
+    try {
+        const historyResult = await db.query('SELECT * FROM chat_history WHERE user_id = $1 ORDER BY timestamp DESC', [userId]);
+        res.json(historyResult.rows);
+    } catch (error) {
+        console.error('Error fetching chat history:', error);
+        return res.status(500).json({ error: 'Failed to retrieve chat history.' });
+    }
 });
 
 // --- API Key Management ---
-app.get('/api/keys', authenticateWebSession, (req, res) => {
+app.get('/api/keys', authenticateWebSession, async (req, res) => {
     const userId = req.user.id;
-    db.all('SELECT id, provider, api_key, created_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC', [userId], (err, rows) => {
-        if (err) {
-            console.error('Error fetching API keys:', err.message);
-            return res.status(500).json({ error: 'Failed to retrieve API keys.' });
-        }
-        res.json(rows);
-    });
+    try {
+        const keysResult = await db.query('SELECT id, provider, api_key, created_at FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
+        res.json(keysResult.rows);
+    } catch (error) {
+        console.error('Error fetching API keys:', error);
+        return res.status(500).json({ error: 'Failed to retrieve API keys.' });
+    }
 });
 
-app.delete('/api/keys/:id', authenticateWebSession, (req, res) => {
+app.delete('/api/keys/:id', authenticateWebSession, async (req, res) => {
     const keyId = req.params.id;
     const userId = req.user.id;
-    db.run('DELETE FROM api_keys WHERE id = ? AND user_id = ?', [keyId, userId], function(err) {
-        if (err) {
-            console.error('Error deleting API key:', err.message);
-            return res.status(500).json({ error: 'Failed to delete API key.' });
-        }
-        if (this.changes === 0) {
+    try {
+        const deleteResult = await db.query('DELETE FROM api_keys WHERE id = $1 AND user_id = $2', [keyId, userId]);
+        if (deleteResult.rowCount === 0) {
             return res.status(404).json({ error: 'API key not found or you do not have permission to delete it.' });
         }
         res.status(200).json({ message: 'API key deleted successfully.' });
-    });
+    } catch (error) {
+        console.error('Error deleting API key:', error);
+        return res.status(500).json({ error: 'Failed to delete API key.' });
+    }
 });
 
 app.get('/v1/models', async (req, res) => {
@@ -416,7 +405,7 @@ app.get('/v1/models', async (req, res) => {
             case 'claude':
                 const response = await axios.get(HAJI_ANTHROPIC_URL, {
                     params: { ask: 'hello', model: 'claude-3-opus-20240229', api_key: HAJI_API_KEY, uid: '1' },
-                    timeout: 240000
+                    timeout: 240000,
                 });
                 if (!response.data.supported_models || !Array.isArray(response.data.supported_models)) {
                     throw new Error('Could not retrieve supported models from Claude API.');
@@ -459,12 +448,14 @@ app.post('/v1/chat/completions', async (req, res) => {
   const { userId } = req.authInfo;
   const { model, messages, stream, max_tokens, google_api_key } = req.body;
 
-  const logChatHistory = (responseContent) => {
+  const logChatHistory = async (responseContent) => {
     const messagesJson = JSON.stringify(messages);
     const responseJson = JSON.stringify({ role: 'assistant', content: responseContent });
-    db.run('INSERT INTO chat_history (user_id, model, messages, response) VALUES (?, ?, ?, ?)', [userId, model, messagesJson, responseJson], (err) => {
-        if (err) console.error('Failed to log chat history:', err.message);
-    });
+    try {
+        await db.query('INSERT INTO chat_history (user_id, model, messages, response) VALUES ($1, $2, $3, $4)', [userId, model, messagesJson, responseJson]);
+    } catch (err) {
+        console.error('Failed to log chat history:', err.message);
+    }
   };
 
   if (!messages || messages.length === 0) {
@@ -497,7 +488,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         if (!apiResponse || !apiResponse.answer) { throw new Error('Received an invalid response from the external Puter API for a GPT-5 model.'); }
         const modelUsed = apiResponse.model_used || model;
         const answer = apiResponse.answer;
-        logChatHistory(answer);
+        await logChatHistory(answer);
         const completionId = `chatcmpl-${Date.now()}`;
         if (stream) {
             res.setHeader('Content-Type', 'text/event-stream');
@@ -528,7 +519,7 @@ app.post('/v1/chat/completions', async (req, res) => {
       if (!imgbbResponse.data || !imgbbResponse.data.success) { throw new Error('Failed to upload generated image to ImgBB.'); }
       const generatedImageUrl = imgbbResponse.data.data.url;
       const responseContent = `![Generated Image](${generatedImageUrl})`;
-      logChatHistory(responseContent);
+      await logChatHistory(responseContent);
       const completionId = `chatcmpl-gen-${Date.now()}`;
       if (stream) {
         const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
@@ -564,7 +555,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from Gemini API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external Gemini API.'); }
         const modelUsed = apiResponse.model_used || model;
         const answer = apiResponse.answer;
-        logChatHistory(answer);
+        await logChatHistory(answer);
         const completionId = `chatcmpl-${Date.now()}`;
         if (stream) {
             res.setHeader('Content-Type', 'text/event-stream');
@@ -587,7 +578,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from Puter API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external Puter API.'); }
         const modelUsed = apiResponse.model_used || model;
         const answer = apiResponse.answer;
-        logChatHistory(answer);
+        await logChatHistory(answer);
         const completionId = `chatcmpl-${Date.now()}`;
         if (stream) {
             res.setHeader('Content-Type', 'text/event-stream');
@@ -623,7 +614,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from OpenAI API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external OpenAI API.'); }
         const modelUsed = apiResponse.model_used || model;
         const answer = apiResponse.answer;
-        logChatHistory(answer);
+        await logChatHistory(answer);
         const completionId = `chatcmpl-${Date.now()}`;
         if (stream) {
             res.setHeader('Content-Type', 'text/event-stream');
@@ -663,7 +654,7 @@ app.post('/v1/chat/completions', async (req, res) => {
     if (!apiResponse || !apiResponse.answer) { throw new Error('Received an invalid response from the external API.'); }
     const modelUsed = apiResponse.model_used || model;
     const answer = apiResponse.answer;
-    logChatHistory(answer);
+    await logChatHistory(answer);
     const completionId = `chatcmpl-${Date.now()}`;
     if (stream) {
       res.setHeader('Content-Type', 'text/event-stream');
