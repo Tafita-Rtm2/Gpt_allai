@@ -40,17 +40,10 @@ const initializeDatabase = async () => {
         `);
         console.log('API keys table is ready.');
 
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS chat_history (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                model TEXT NOT NULL,
-                messages TEXT NOT NULL,
-                response TEXT NOT NULL,
-                timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-        console.log('Chat history table is ready.');
+        // Chat history table is no longer needed.
+        // We will drop it if it exists to clean up the database.
+        await pool.query(`DROP TABLE IF EXISTS chat_history;`);
+        console.log('Chat history table removed if it existed.');
 
     } catch (err) {
         console.error('Error initializing database:', err.stack);
