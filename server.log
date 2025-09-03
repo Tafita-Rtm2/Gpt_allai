@@ -1,18 +1,26 @@
-node:internal/modules/package_json_reader:256
-  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
-        ^
+node:events:496
+      throw er; // Unhandled 'error' event
+      ^
 
-Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'express' imported from /app/server.js
-    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:256:9)
-    at packageResolve (node:internal/modules/esm/resolve:768:81)
-    at moduleResolve (node:internal/modules/esm/resolve:854:18)
-    at defaultResolve (node:internal/modules/esm/resolve:984:11)
-    at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)
-    at #cachedDefaultResolve (node:internal/modules/esm/loader:704:25)
-    at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)
-    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)
-    at ModuleJob._link (node:internal/modules/esm/module_job:175:49) {
-  code: 'ERR_MODULE_NOT_FOUND'
+Error: listen EADDRINUSE: address already in use 0.0.0.0:3001
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at Function.listen (/app/node_modules/express/lib/application.js:635:24)
+    at Object.<anonymous> (/app/server.js:768:5)
+    at Module._compile (node:internal/modules/cjs/loader:1730:14)
+    at Object..js (node:internal/modules/cjs/loader:1895:10)
+    at Module.load (node:internal/modules/cjs/loader:1465:32)
+    at Function._load (node:internal/modules/cjs/loader:1282:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 3001
 }
 
 Node.js v22.17.1
