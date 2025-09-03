@@ -8,25 +8,25 @@ const FormData = require('form-data');
 const { db, initializeDatabase } = require('./database');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
-//const cluster = require('cluster');
+const cluster = require('cluster');
 const os = require('os');
 
-//const numCPUs = os.cpus().length;
+const numCPUs = os.cpus().length;
 
-//if (cluster.isPrimary) {
-//    console.log(`Primary ${process.pid} is running`);
-//
-//    // Fork workers.
-//    for (let i = 0; i < numCPUs; i++) {
-//        cluster.fork();
-//    }
-//
-//    cluster.on('exit', (worker, code, signal) => {
-//        console.log(`worker ${worker.process.pid} died`);
-//        console.log("Forking a new worker");
-//        cluster.fork();
-//    });
-//} else {
+if (cluster.isPrimary) {
+    console.log(`Primary ${process.pid} is running`);
+
+    // Fork workers.
+    for (let i = 0; i < numCPUs; i++) {
+        cluster.fork();
+    }
+
+    cluster.on('exit', (worker, code, signal) => {
+        console.log(`worker ${worker.process.pid} died`);
+        console.log("Forking a new worker");
+        cluster.fork();
+    });
+} else {
     const app = express();
     app.use(express.json({ limit: '50mb' }));
 app.use(cors());
@@ -96,7 +96,7 @@ app.post('/auth/login', async (req, res) => {
 });
 
 // --- CONFIGURATION ---
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 // API Keys
 const HAJI_API_KEY = process.env.HAJI_API_KEY;
 const HAJI_GEMINI_API_KEY = process.env.HAJI_GEMINI_API_KEY;
@@ -118,7 +118,7 @@ const HAJI_ANTHROPIC_URL = process.env.HAJI_ANTHROPIC_URL;
 const HAJI_FLUX_URL = process.env.HAJI_FLUX_URL;
 const HAJI_GPTOSS_URL = process.env.HAJI_GPTOSS_URL;
 const HAJI_GEMINI_URL = process.env.HAJI_GEMINI_URL;
-const HAJI_PUTER_URL = process.env.HAJI_PUTer_URL;
+const HAJI_PUTER_URL = process.env.HAJI_PUTER_URL;
 const HAJI_OPENAI_URL = process.env.HAJI_OPENAI_URL;
 const HAJI_IMAGEN_URL = process.env.HAJI_IMAGEN_URL;
 const HAJI_RTM_URL = process.env.HAJI_RTM_URL;
@@ -231,7 +231,7 @@ const puterModels = [
     "qwen/qwen-2-72b-instruct", "openchat/openchat-8b", "mistralai/mistral-7b-instruct-v0.3", "nousresearch/hermes-2-pro-llama-3-8b",
     "mistralai/mistral-7b-instruct", "microsoft/phi-3-mini-128k-instruct", "microsoft/phi-3-medium-128k-instruct", "neversleep/llama-3-lumimaid-70b",
     "perplexity/llama-3-sonar-small-32k-chat", "perplexity/llama-3-sonar-small-32k-online", "google/gemini-flash-1.5",
-    "perplexity/llama-3-sonar-large-32k-chat", "deepseek/deepseek-chat-v2.5", "perplexity/llama-3-sonar-large-32k-online",
+    "perplexity/llama-3-sonar-large-32k-chat", "deepseek/deepseek-chat-v2.5", "perplexity/llama-3.1-sonar-large-32k-online",
     "meta-llama/llama-3-8b", "meta-llama/llama-3-70b", "meta-llama/llama-guard-2-8b", "liuhaotian/llava-yi-34b",
     "allenai/olmo-7b-instruct", "qwen/qwen-7b-chat", "qwen/qwen-4b-chat", "qwen/qwen-110b-chat", "qwen/qwen-32b-chat", "qwen/qwen-72b-chat",
     "qwen/qwen-14b-chat", "neversleep/llama-3-lumimaid-8b", "snowflake/snowflake-arctic-instruct", "fireworks/firellava-13b", "lynn/soliloquy-l3",
@@ -637,19 +637,10 @@ app.post('/v1/chat/completions', async (req, res) => {
         }
         return;
     } else if (rtmModels.includes(model)) {
-        const response = await axios.get(`${HAJI_RTM_URL}/${ask}?model=${model}`, { timeout: 240000 });
+        const response = await axios.get(`${HAJI_RTM_URL}/${encodeURIComponent(ask)}?model=${model}`, { timeout: 240000 });
         const answer = response.data;
         const completionId = `chatcmpl-${Date.now()}`;
-        if (stream) {
-            res.setHeader('Content-Type', 'text/event-stream');
-            res.write(`data: ${JSON.stringify({ id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] })}\n\n`);
-            res.write(`data: ${JSON.stringify({ id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: { content: answer }, finish_reason: null }] })}\n\n`);
-            res.write(`data: ${JSON.stringify({ id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })}\n\n`);
-            res.write('data: [DONE]\n\n');
-            res.end();
-        } else {
-            res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
-        }
+        res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
         return;
     } else if (openAIModels.includes(model)) {
         let finalImageUrl = null;
@@ -763,9 +754,11 @@ app.post('/v1/images/generations', async (req, res) => {
 });
 
 // Initialize the database and create tables
-initializeDatabase();
+initializeDatabase().then(() => {
+    fetchRtmModels();
+});
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`OpenAI-compatible proxy server is running on http://localhost:${PORT}`);
   const requiredVars = [
     'HAJI_API_KEY', 'IMGBB_API_KEY', 'HAJI_GEMINI_API_KEY', 'HAJI_PUTER_API_KEY', 'HAJI_OPENAI_API_KEY',
@@ -778,4 +771,11 @@ app.listen(PORT, () => {
     console.warn('The application will likely fail without them.\n');
   }
 });
-//}
+
+process.on('SIGINT', () => {
+    console.log('SIGINT signal received: closing HTTP server');
+    server.close(() => {
+        console.log('HTTP server closed');
+    });
+});
+}
