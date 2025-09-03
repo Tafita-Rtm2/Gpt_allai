@@ -8,25 +8,25 @@ const FormData = require('form-data');
 const { db, initializeDatabase } = require('./database');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
-const cluster = require('cluster');
+//const cluster = require('cluster');
 const os = require('os');
 
-const numCPUs = os.cpus().length;
+//const numCPUs = os.cpus().length;
 
-if (cluster.isPrimary) {
-    console.log(`Primary ${process.pid} is running`);
-
-    // Fork workers.
-    for (let i = 0; i < numCPUs; i++) {
-        cluster.fork();
-    }
-
-    cluster.on('exit', (worker, code, signal) => {
-        console.log(`worker ${worker.process.pid} died`);
-        console.log("Forking a new worker");
-        cluster.fork();
-    });
-} else {
+//if (cluster.isPrimary) {
+//    console.log(`Primary ${process.pid} is running`);
+//
+//    // Fork workers.
+//    for (let i = 0; i < numCPUs; i++) {
+//        cluster.fork();
+//    }
+//
+//    cluster.on('exit', (worker, code, signal) => {
+//        console.log(`worker ${worker.process.pid} died`);
+//        console.log("Forking a new worker");
+//        cluster.fork();
+//    });
+//} else {
     const app = express();
     app.use(express.json({ limit: '50mb' }));
 app.use(cors());
@@ -96,7 +96,7 @@ app.post('/auth/login', async (req, res) => {
 });
 
 // --- CONFIGURATION ---
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 // API Keys
 const HAJI_API_KEY = process.env.HAJI_API_KEY;
 const HAJI_GEMINI_API_KEY = process.env.HAJI_GEMINI_API_KEY;
@@ -118,7 +118,7 @@ const HAJI_ANTHROPIC_URL = process.env.HAJI_ANTHROPIC_URL;
 const HAJI_FLUX_URL = process.env.HAJI_FLUX_URL;
 const HAJI_GPTOSS_URL = process.env.HAJI_GPTOSS_URL;
 const HAJI_GEMINI_URL = process.env.HAJI_GEMINI_URL;
-const HAJI_PUTER_URL = process.env.HAJI_PUTER_URL;
+const HAJI_PUTER_URL = process.env.HAJI_PUTer_URL;
 const HAJI_OPENAI_URL = process.env.HAJI_OPENAI_URL;
 const HAJI_IMAGEN_URL = process.env.HAJI_IMAGEN_URL;
 const HAJI_RTM_URL = process.env.HAJI_RTM_URL;
@@ -261,6 +261,16 @@ const puterModels = [
 
 let rtmModels = [];
 
+const fetchRtmModels = async () => {
+    try {
+        const response = await axios.get(`${HAJI_RTM_URL}/models`);
+        rtmModels = response.data.map(model => model.name);
+        console.log('RTM models fetched successfully.');
+    } catch (error) {
+        console.error('Could not fetch RTM models:', error.message);
+    }
+};
+
 const imageGenerationKeywords = [
     'generate image of', 'cree une image', 'generate an image of', 'generate image', 'generate an image', 'generate',
     'create image of', 'create an image of', 'create image', 'create an image', 'create',
@@ -294,6 +304,9 @@ const authenticateApiKey = async (req, res, next) => {
             filter: filter,
             backendKey: backendKey,
         };
+        if (keyRecord.provider === 'rtm' && rtmModels.length === 0) {
+            await fetchRtmModels();
+        }
         next();
     } catch (error) {
         console.error('Database error during API key authentication:', error);
@@ -468,16 +481,7 @@ app.get('/v1/models', async (req, res) => {
                 }
                 break;
             case 'rtm':
-                try {
-                    if (rtmModels.length === 0) {
-                        const response = await axios.get(`${HAJI_RTM_URL}/models`);
-                        rtmModels = response.data.map(model => model.name);
-                    }
-                    modelsList = rtmModels;
-                } catch (e) {
-                    console.error("Failed to fetch dynamic models for RTM.", e.message);
-                    modelsList = [];
-                }
+                modelsList = rtmModels;
                 owner = 'rtm';
                 break;
             default:
@@ -774,4 +778,4 @@ app.listen(PORT, () => {
     console.warn('The application will likely fail without them.\n');
   }
 });
-}
+//}

@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     logoUrl = 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/icons/gear.svg';
                     break;
                 case 'rtm':
-                    logoUrl = 'httpshttps://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/icons/gear.svg';
+                    logoUrl = 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/icons/gear.svg';
                     break;
             }
             providerLogo.src = logoUrl;
