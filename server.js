@@ -102,6 +102,7 @@ const HAJI_API_KEY = process.env.HAJI_API_KEY;
 const HAJI_GEMINI_API_KEY = process.env.HAJI_GEMINI_API_KEY;
 const HAJI_PUTER_API_KEY = process.env.HAJI_PUTER_API_KEY;
 const HAJI_OPENAI_API_KEY = process.env.HAJI_OPENAI_API_KEY;
+const HAJI_RTM_API_KEY = process.env.HAJI_RTM_API_KEY;
 const IMGBB_API_KEY = process.env.IMGBB_API_KEY;
 
 const backendKeys = {
@@ -109,6 +110,7 @@ const backendKeys = {
     gemini: HAJI_GEMINI_API_KEY,
     puter: HAJI_PUTER_API_KEY,
     openai: HAJI_OPENAI_API_KEY,
+    rtm: HAJI_RTM_API_KEY,
 };
 
 // API URLs from .env
@@ -119,6 +121,7 @@ const HAJI_GEMINI_URL = process.env.HAJI_GEMINI_URL;
 const HAJI_PUTER_URL = process.env.HAJI_PUTER_URL;
 const HAJI_OPENAI_URL = process.env.HAJI_OPENAI_URL;
 const HAJI_IMAGEN_URL = process.env.HAJI_IMAGEN_URL;
+const HAJI_RTM_URL = process.env.HAJI_RTM_URL;
 const IMGBB_UPLOAD_URL = process.env.IMGBB_UPLOAD_URL;
 
 // --- MODEL DATA ---
@@ -256,6 +259,8 @@ const puterModels = [
     "meta-llama/llama-2-13b-chat", "meta-llama/llama-2-70b-chat"
 ];
 
+let rtmModels = [];
+
 const imageGenerationKeywords = [
     'generate image of', 'cree une image', 'generate an image of', 'generate image', 'generate an image', 'generate',
     'create image of', 'create an image of', 'create image', 'create an image', 'create',
@@ -335,6 +340,9 @@ app.post('/api/generate-key', authenticateWebSession, async (req, res) => {
             if (sub_provider) {
                 prefix = sub_provider;
             }
+            break;
+        case 'rtm':
+            backendKey = backendKeys.rtm;
             break;
         default:
             return res.status(400).json({ error: 'Invalid provider specified.' });
@@ -458,6 +466,19 @@ app.get('/v1/models', async (req, res) => {
                 } else {
                     modelsList = puterModels.filter(m => m.startsWith(`${filter}/`));
                 }
+                break;
+            case 'rtm':
+                try {
+                    if (rtmModels.length === 0) {
+                        const response = await axios.get(`${HAJI_RTM_URL}/models`);
+                        rtmModels = response.data.map(model => model.name);
+                    }
+                    modelsList = rtmModels;
+                } catch (e) {
+                    console.error("Failed to fetch dynamic models for RTM.", e.message);
+                    modelsList = [];
+                }
+                owner = 'rtm';
                 break;
             default:
                 return res.status(500).json({ error: 'Internal server error: Invalid provider context.' });
@@ -609,6 +630,21 @@ app.post('/v1/chat/completions', async (req, res) => {
             res.end();
         } else {
             res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
+        }
+        return;
+    } else if (rtmModels.includes(model)) {
+        const response = await axios.get(`${HAJI_RTM_URL}/${ask}?model=${model}`, { timeout: 240000 });
+        const answer = response.data;
+        const completionId = `chatcmpl-${Date.now()}`;
+        if (stream) {
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.write(`data: ${JSON.stringify({ id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] })}\n\n`);
+            res.write(`data: ${JSON.stringify({ id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: { content: answer }, finish_reason: null }] })}\n\n`);
+            res.write(`data: ${JSON.stringify({ id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+        } else {
+            res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
         }
         return;
     } else if (openAIModels.includes(model)) {
