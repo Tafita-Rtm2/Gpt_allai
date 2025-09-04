@@ -1,5 +1,5 @@
 {
-  "name": "rtm_aiproxy",
+  "name": "rtm_ai",
   "version": "1.0.0",
   "description": "A proxy server to make rtm compatible with OpenAI API format.",
   "main": "server.js",
