@@ -50,9 +50,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 case 'puter':
                     logoUrl = 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/icons/gear.svg';
                     break;
-                case 'rtm':
-                    logoUrl = 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/icons/gear.svg';
-                    break;
             }
             providerLogo.src = logoUrl;
             providerLogo.classList.remove('hidden');
