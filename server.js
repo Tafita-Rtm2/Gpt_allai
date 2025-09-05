@@ -459,7 +459,7 @@ app.get('/v1/models', async (req, res) => {
                  try {
                      const response = await axios.get(HAJI_OPENAI_URL, {
                         params: { ask: 'hello', model: 'gpt-4', api_key: backendKey, uid: req.authInfo.userId },
-                        timeout: 240000,
+                        timeout: 2400000,
                     });
                     if (response.data && Array.isArray(response.data.supported_models)) {
                         modelsList = response.data.supported_models;
