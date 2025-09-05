@@ -1,19 +1,19 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Roboto+Mono:wght@400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap');
 
 :root {
-    --primary-color: #007bff;
-    --primary-hover: #0056b3;
-    --background-color: #f8f9fa;
-    --card-background: #ffffff;
-    --text-color: #212529;
-    --label-color: #6c757d;
-    --border-color: #dee2e6;
-    --danger-color: #dc3545;
-    --danger-hover: #c82333;
-    --font-family: 'Inter', sans-serif;
+    --primary-color: #6a11cb;
+    --primary-hover: #8A2BE2;
+    --background-color: #0d0c22;
+    --card-background: #1a1a3a;
+    --text-color: #e0e0e0;
+    --label-color: #a0a0a0;
+    --border-color: rgba(106, 17, 203, 0.3);
+    --danger-color: #e53e3e;
+    --danger-hover: #c53030;
+    --font-family: 'Roboto', sans-serif;
     --font-mono: 'Roboto Mono', monospace;
-    --border-radius: 0.375rem;
-    --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    --border-radius: 0.5rem;
+    --box-shadow: 0 0 15px rgba(106, 17, 203, 0.2);
 }
 
 body {
@@ -150,7 +150,7 @@ select, input[type="search"] {
 select:focus, input[type="search"]:focus {
     outline: none;
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 4px rgba(0, 123, 255, 0.15);
+    box-shadow: 0 0 0 4px rgba(106, 17, 203, 0.25);
 }
 
 .provider-select-container {
@@ -243,7 +243,12 @@ select:focus, input[type="search"]:focus {
 }
 
 .history-item:hover {
-    background-color: #f1f3f5;
+    background-color: rgba(106, 17, 203, 0.1);
+}
+
+select, input[type="search"] {
+    background-color: var(--background-color);
+    color: var(--text-color);
 }
 
 .history-item-info {
