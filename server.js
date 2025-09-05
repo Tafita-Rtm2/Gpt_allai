@@ -102,6 +102,7 @@ const HAJI_API_KEY = process.env.HAJI_API_KEY;
 const HAJI_GEMINI_API_KEY = process.env.HAJI_GEMINI_API_KEY;
 const HAJI_PUTER_API_KEY = process.env.HAJI_PUTER_API_KEY;
 const HAJI_OPENAI_API_KEY = process.env.HAJI_OPENAI_API_KEY;
+const HAJI_RTM_API_KEY = process.env.HAJI_RTM_API_KEY;
 const IMGBB_API_KEY = process.env.IMGBB_API_KEY;
 
 const backendKeys = {
@@ -109,6 +110,7 @@ const backendKeys = {
     gemini: HAJI_GEMINI_API_KEY,
     puter: HAJI_PUTER_API_KEY,
     openai: HAJI_OPENAI_API_KEY,
+    rtm: HAJI_RTM_API_KEY,
 };
 
 // API URLs from .env
@@ -119,6 +121,7 @@ const HAJI_GEMINI_URL = process.env.HAJI_GEMINI_URL;
 const HAJI_PUTER_URL = process.env.HAJI_PUTER_URL;
 const HAJI_OPENAI_URL = process.env.HAJI_OPENAI_URL;
 const HAJI_IMAGEN_URL = process.env.HAJI_IMAGEN_URL;
+const HAJI_RTM_URL = process.env.HAJI_RTM_URL;
 const IMGBB_UPLOAD_URL = process.env.IMGBB_UPLOAD_URL;
 
 // --- MODEL DATA ---
@@ -228,7 +231,7 @@ const puterModels = [
     "qwen/qwen-2-72b-instruct", "openchat/openchat-8b", "mistralai/mistral-7b-instruct-v0.3", "nousresearch/hermes-2-pro-llama-3-8b",
     "mistralai/mistral-7b-instruct", "microsoft/phi-3-mini-128k-instruct", "microsoft/phi-3-medium-128k-instruct", "neversleep/llama-3-lumimaid-70b",
     "perplexity/llama-3-sonar-small-32k-chat", "perplexity/llama-3-sonar-small-32k-online", "google/gemini-flash-1.5",
-    "perplexity/llama-3-sonar-large-32k-chat", "deepseek/deepseek-chat-v2.5", "perplexity/llama-3-sonar-large-32k-online",
+    "perplexity/llama-3-sonar-large-32k-chat", "deepseek/deepseek-chat-v2.5", "perplexity/llama-3.1-sonar-large-32k-online",
     "meta-llama/llama-3-8b", "meta-llama/llama-3-70b", "meta-llama/llama-guard-2-8b", "liuhaotian/llava-yi-34b",
     "allenai/olmo-7b-instruct", "qwen/qwen-7b-chat", "qwen/qwen-4b-chat", "qwen/qwen-110b-chat", "qwen/qwen-32b-chat", "qwen/qwen-72b-chat",
     "qwen/qwen-14b-chat", "neversleep/llama-3-lumimaid-8b", "snowflake/snowflake-arctic-instruct", "fireworks/firellava-13b", "lynn/soliloquy-l3",
@@ -255,6 +258,18 @@ const puterModels = [
     "anthropic/claude-2.0", "undi95/remm-slerp-l2-13b", "gryphe/mythomax-l2-13b",
     "meta-llama/llama-2-13b-chat", "meta-llama/llama-2-70b-chat"
 ];
+
+let rtmModels = [];
+
+const fetchRtmModels = async () => {
+    try {
+        const response = await axios.get(`${HAJI_RTM_URL}/models`);
+        rtmModels = response.data.map(model => model.name);
+        console.log('RTM models fetched successfully.');
+    } catch (error) {
+        console.error('Could not fetch RTM models:', error.message);
+    }
+};
 
 const imageGenerationKeywords = [
     'generate image of', 'cree une image', 'generate an image of', 'generate image', 'generate an image', 'generate',
@@ -289,6 +304,9 @@ const authenticateApiKey = async (req, res, next) => {
             filter: filter,
             backendKey: backendKey,
         };
+        if (keyRecord.provider === 'rtm' && rtmModels.length === 0) {
+            await fetchRtmModels();
+        }
         next();
     } catch (error) {
         console.error('Database error during API key authentication:', error);
@@ -335,6 +353,9 @@ app.post('/api/generate-key', authenticateWebSession, async (req, res) => {
             if (sub_provider) {
                 prefix = sub_provider;
             }
+            break;
+        case 'rtm':
+            backendKey = backendKeys.rtm;
             break;
         default:
             return res.status(400).json({ error: 'Invalid provider specified.' });
@@ -458,6 +479,10 @@ app.get('/v1/models', async (req, res) => {
                 } else {
                     modelsList = puterModels.filter(m => m.startsWith(`${filter}/`));
                 }
+                break;
+            case 'rtm':
+                modelsList = rtmModels;
+                owner = 'rtm';
                 break;
             default:
                 return res.status(500).json({ error: 'Internal server error: Invalid provider context.' });
@@ -611,6 +636,12 @@ app.post('/v1/chat/completions', async (req, res) => {
             res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
         }
         return;
+    } else if (rtmModels.includes(model)) {
+        const response = await axios.get(`${HAJI_RTM_URL}/${encodeURIComponent(ask)}?model=${model}`, { timeout: 240000 });
+        const answer = response.data;
+        const completionId = `chatcmpl-${Date.now()}`;
+        res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
+        return;
     } else if (openAIModels.includes(model)) {
         let finalImageUrl = null;
         if (imageUrl) {
@@ -723,9 +754,11 @@ app.post('/v1/images/generations', async (req, res) => {
 });
 
 // Initialize the database and create tables
-initializeDatabase();
+initializeDatabase().then(() => {
+    fetchRtmModels();
+});
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`OpenAI-compatible proxy server is running on http://localhost:${PORT}`);
   const requiredVars = [
     'HAJI_API_KEY', 'IMGBB_API_KEY', 'HAJI_GEMINI_API_KEY', 'HAJI_PUTER_API_KEY', 'HAJI_OPENAI_API_KEY',
@@ -737,5 +770,12 @@ app.listen(PORT, () => {
     missingVars.forEach(v => console.warn(`- ${v}`));
     console.warn('The application will likely fail without them.\n');
   }
+});
+
+process.on('SIGINT', () => {
+    console.log('SIGINT signal received: closing HTTP server');
+    server.close(() => {
+        console.log('HTTP server closed');
+    });
 });
 }
