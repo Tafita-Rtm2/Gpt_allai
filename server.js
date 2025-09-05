@@ -573,7 +573,7 @@ app.post('/v1/chat/completions', async (req, res) => {
     }
     const uid = userId;
     if (gpt5Models.includes(model)) {
-        const apiParams = { ask: ask, model: model, api_key: HAJI_PUTER_API_KEY, uid, roleplay, stream: false, };
+        const apiParams = { ask: ask, model: model, api_key: HAJI_OPENAI_API_KEY, uid, roleplay, stream: false, };
         const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 240000 });
         const apiResponse = response.data;
         if (!apiResponse || !apiResponse.answer) { throw new Error('Received an invalid response from the external Puter API for a GPT-5 model.'); }
