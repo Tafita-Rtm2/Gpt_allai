@@ -126,9 +126,20 @@ const IMGBB_UPLOAD_URL = process.env.IMGBB_UPLOAD_URL;
 
 // --- MODEL DATA ---
 let dynamicPuterModels = [];
-let reroutedGptModels = [];
+
+// Default list of essential GPT-5 models to act as a fallback.
+const defaultReroutedGptModels = [
+    "openai/gpt-5-chat",
+    "openai/gpt-5",
+    "openai/gpt-5-mini",
+    "openai/gpt-5-nano"
+];
+
+// Initialize with the default fallback list. This will be overwritten on successful API fetch.
+let reroutedGptModels = [...defaultReroutedGptModels];
 
 let openAIModels = [
+    ...defaultReroutedGptModels,
     "gpt-4-0613", "gpt-4", "gpt-3.5-turbo", "gpt-3.5-turbo-instruct", "gpt-3.5-turbo-instruct-0914",
     "gpt-4-1106-preview", "gpt-3.5-turbo-1106", "gpt-4-0125-preview", "gpt-4-turbo-preview", "gpt-3.5-turbo-0125",
     "gpt-4-turbo", "gpt-4-turbo-2024-04-09", "gpt-4o", "gpt-4o-2024-05-13", "gpt-4o-mini-2024-07-18", "gpt-4o-mini",
@@ -285,28 +296,29 @@ const fetchAndCachePuterModels = async () => {
         });
         const models = response.data.supported_models;
         if (models && Array.isArray(models)) {
+            // API call was successful, now overwrite the defaults with the full, fresh list.
             dynamicPuterModels = models;
-            console.log(`Successfully fetched and cached ${dynamicPuterModels.length} Puter models.`);
+            console.log(`Successfully fetched and cached ${dynamicPuterModels.length} Puter models from the API.`);
 
-            // Find all OpenAI models from the dynamic list
             const newOpenAIModels = dynamicPuterModels.filter(m => m.startsWith('openai/'));
-            if (newOpenAIModels.length > 0) {
-                const originalSize = openAIModels.length;
-                openAIModels = [...new Set([...openAIModels, ...newOpenAIModels])];
-                console.log(`Added ${openAIModels.length - originalSize} new OpenAI models from Puter API.`);
-            }
 
-            // Specifically find and cache the GPT-5 models that need rerouting
+            // Rebuild the list cleanly to avoid duplicates and ensure freshness.
+            // First, get the base list of OpenAI models that are not the special GPT-5 ones.
+            const nonGpt5OpenAIModels = openAIModels.filter(m => !m.startsWith('openai/gpt-5'));
+            // Then, combine the base list with all new OpenAI models from the API.
+            openAIModels = [...new Set([...nonGpt5OpenAIModels, ...newOpenAIModels])];
+
+            // Overwrite the rerouted models list with the fresh list from the API.
             reroutedGptModels = newOpenAIModels.filter(m => m.startsWith('openai/gpt-5'));
-            console.log(`Found and cached ${reroutedGptModels.length} GPT-5 models for special routing.`);
 
+            console.log(`Updated model lists from API. Rerouting ${reroutedGptModels.length} GPT-5 models.`);
         } else {
-            console.error('Could not parse Puter models from API, using hardcoded list.');
-            dynamicPuterModels = puterModels;
+            // API call succeeded but the response was invalid. Keep the defaults.
+            console.error('Could not parse Puter models from API response. The application will continue using the default fallback list.');
         }
     } catch (error) {
-        console.error('Failed to fetch Puter models, using hardcoded list:', error.message);
-        dynamicPuterModels = puterModels; // Fallback to hardcoded list
+        // API call failed. Keep the defaults.
+        console.error(`Failed to fetch dynamic models from Puter API: ${error.message}. The application will continue using the default fallback list.`);
     }
 };
 
