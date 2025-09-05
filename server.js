@@ -102,7 +102,6 @@ const HAJI_API_KEY = process.env.HAJI_API_KEY;
 const HAJI_GEMINI_API_KEY = process.env.HAJI_GEMINI_API_KEY;
 const HAJI_PUTER_API_KEY = process.env.HAJI_PUTER_API_KEY;
 const HAJI_OPENAI_API_KEY = process.env.HAJI_OPENAI_API_KEY;
-const HAJI_RTM_API_KEY = process.env.HAJI_RTM_API_KEY;
 const IMGBB_API_KEY = process.env.IMGBB_API_KEY;
 
 const backendKeys = {
@@ -110,7 +109,6 @@ const backendKeys = {
     gemini: HAJI_GEMINI_API_KEY,
     puter: HAJI_PUTER_API_KEY,
     openai: HAJI_OPENAI_API_KEY,
-    rtm: HAJI_RTM_API_KEY,
 };
 
 // API URLs from .env
@@ -121,25 +119,17 @@ const HAJI_GEMINI_URL = process.env.HAJI_GEMINI_URL;
 const HAJI_PUTER_URL = process.env.HAJI_PUTER_URL;
 const HAJI_OPENAI_URL = process.env.HAJI_OPENAI_URL;
 const HAJI_IMAGEN_URL = process.env.HAJI_IMAGEN_URL;
-const HAJI_RTM_URL = process.env.HAJI_RTM_URL;
 const IMGBB_UPLOAD_URL = process.env.IMGBB_UPLOAD_URL;
 
 // --- MODEL DATA ---
-let dynamicPuterModels = [];
-
-// Default list of essential GPT-5 models to act as a fallback.
-const defaultReroutedGptModels = [
-    "openai/gpt-5-chat",
-    "openai/gpt-5",
-    "openai/gpt-5-mini",
-    "openai/gpt-5-nano"
+const gpt5Models = [
+    "openai/gpt-5-chat", "openai/gpt-5", "openai/gpt-5-mini", "openai/gpt-5-nano",
+    "gpt-5-nano", "gpt-5-chat-latest", "gpt-5-2025-08-07", "gpt-5", "gpt-5-mini-2025-08-07",
+    "gpt-5-mini", "gpt-5-nano-2025-08-07",
 ];
 
-// Initialize with the default fallback list. This will be overwritten on successful API fetch.
-let reroutedGptModels = [...defaultReroutedGptModels];
-
-let openAIModels = [
-    ...defaultReroutedGptModels,
+const openAIModels = [
+    ...gpt5Models,
     "gpt-4-0613", "gpt-4", "gpt-3.5-turbo", "gpt-3.5-turbo-instruct", "gpt-3.5-turbo-instruct-0914",
     "gpt-4-1106-preview", "gpt-3.5-turbo-1106", "gpt-4-0125-preview", "gpt-4-turbo-preview", "gpt-3.5-turbo-0125",
     "gpt-4-turbo", "gpt-4-turbo-2024-04-09", "gpt-4o", "gpt-4o-2024-05-13", "gpt-4o-mini-2024-07-18", "gpt-4o-mini",
@@ -238,7 +228,7 @@ const puterModels = [
     "qwen/qwen-2-72b-instruct", "openchat/openchat-8b", "mistralai/mistral-7b-instruct-v0.3", "nousresearch/hermes-2-pro-llama-3-8b",
     "mistralai/mistral-7b-instruct", "microsoft/phi-3-mini-128k-instruct", "microsoft/phi-3-medium-128k-instruct", "neversleep/llama-3-lumimaid-70b",
     "perplexity/llama-3-sonar-small-32k-chat", "perplexity/llama-3-sonar-small-32k-online", "google/gemini-flash-1.5",
-    "perplexity/llama-3-sonar-large-32k-chat", "deepseek/deepseek-chat-v2.5", "perplexity/llama-3.1-sonar-large-32k-online",
+    "perplexity/llama-3-sonar-large-32k-chat", "deepseek/deepseek-chat-v2.5", "perplexity/llama-3-sonar-large-32k-online",
     "meta-llama/llama-3-8b", "meta-llama/llama-3-70b", "meta-llama/llama-guard-2-8b", "liuhaotian/llava-yi-34b",
     "allenai/olmo-7b-instruct", "qwen/qwen-7b-chat", "qwen/qwen-4b-chat", "qwen/qwen-110b-chat", "qwen/qwen-32b-chat", "qwen/qwen-72b-chat",
     "qwen/qwen-14b-chat", "neversleep/llama-3-lumimaid-8b", "snowflake/snowflake-arctic-instruct", "fireworks/firellava-13b", "lynn/soliloquy-l3",
@@ -265,62 +255,6 @@ const puterModels = [
     "anthropic/claude-2.0", "undi95/remm-slerp-l2-13b", "gryphe/mythomax-l2-13b",
     "meta-llama/llama-2-13b-chat", "meta-llama/llama-2-70b-chat"
 ];
-
-let rtmModels = [];
-
-const fetchRtmModels = async () => {
-    try {
-        const response = await axios.get(`${HAJI_RTM_URL}/models`);
-        rtmModels = response.data.map(model => model.name);
-        console.log('RTM models fetched successfully.');
-    } catch (error) {
-        console.error('Could not fetch RTM models:', error.message);
-    }
-};
-
-let puterModelsFetched = false; // Flag to avoid multiple fetches
-const fetchAndCachePuterModels = async () => {
-    if (puterModelsFetched) return;
-    puterModelsFetched = true;
-
-    try {
-        console.log('Fetching Puter models from API...');
-        const response = await axios.get(HAJI_PUTER_URL, {
-            params: {
-                ask: 'hello',
-                model: 'anthropic/claude-3.7-sonnet',
-                api_key: HAJI_PUTER_API_KEY,
-                uid: '1'
-            },
-            timeout: 10000 // 10 seconds timeout
-        });
-        const models = response.data.supported_models;
-        if (models && Array.isArray(models)) {
-            // API call was successful, now overwrite the defaults with the full, fresh list.
-            dynamicPuterModels = models;
-            console.log(`Successfully fetched and cached ${dynamicPuterModels.length} Puter models from the API.`);
-
-            const newOpenAIModels = dynamicPuterModels.filter(m => m.startsWith('openai/'));
-
-            // Rebuild the list cleanly to avoid duplicates and ensure freshness.
-            // First, get the base list of OpenAI models that are not the special GPT-5 ones.
-            const nonGpt5OpenAIModels = openAIModels.filter(m => !m.startsWith('openai/gpt-5'));
-            // Then, combine the base list with all new OpenAI models from the API.
-            openAIModels = [...new Set([...nonGpt5OpenAIModels, ...newOpenAIModels])];
-
-            // Overwrite the rerouted models list with the fresh list from the API.
-            reroutedGptModels = newOpenAIModels.filter(m => m.startsWith('openai/gpt-5'));
-
-            console.log(`Updated model lists from API. Rerouting ${reroutedGptModels.length} GPT-5 models.`);
-        } else {
-            // API call succeeded but the response was invalid. Keep the defaults.
-            console.error('Could not parse Puter models from API response. The application will continue using the default fallback list.');
-        }
-    } catch (error) {
-        // API call failed. Keep the defaults.
-        console.error(`Failed to fetch dynamic models from Puter API: ${error.message}. The application will continue using the default fallback list.`);
-    }
-};
 
 const imageGenerationKeywords = [
     'generate image of', 'cree une image', 'generate an image of', 'generate image', 'generate an image', 'generate',
@@ -355,9 +289,6 @@ const authenticateApiKey = async (req, res, next) => {
             filter: filter,
             backendKey: backendKey,
         };
-        if (keyRecord.provider === 'rtm' && rtmModels.length === 0) {
-            await fetchRtmModels();
-        }
         next();
     } catch (error) {
         console.error('Database error during API key authentication:', error);
@@ -405,9 +336,6 @@ app.post('/api/generate-key', authenticateWebSession, async (req, res) => {
                 prefix = sub_provider;
             }
             break;
-        case 'rtm':
-            backendKey = backendKeys.rtm;
-            break;
         default:
             return res.status(400).json({ error: 'Invalid provider specified.' });
     }
@@ -427,12 +355,8 @@ app.post('/api/generate-key', authenticateWebSession, async (req, res) => {
 
 app.use('/v1', authenticateApiKey);
 
-app.get('/api/puter-families', async (req, res) => {
-    // Ensure models are fetched if they haven't been already
-    if (dynamicPuterModels.length === 0 && !puterModelsFetched) {
-        await fetchAndCachePuterModels();
-    }
-    const families = [...new Set(dynamicPuterModels.map(model => model.split('/')[0]))];
+app.get('/api/puter-families', (req, res) => {
+    const families = [...new Set(puterModels.map(model => model.split('/')[0]))];
     res.json(families.sort());
 });
 
@@ -514,7 +438,7 @@ app.get('/v1/models', async (req, res) => {
                  try {
                      const response = await axios.get(HAJI_OPENAI_URL, {
                         params: { ask: 'hello', model: 'gpt-4', api_key: backendKey, uid: req.authInfo.userId },
-                        timeout: 2400000,
+                        timeout: 240000,
                     });
                     if (response.data && Array.isArray(response.data.supported_models)) {
                         modelsList = response.data.supported_models;
@@ -528,18 +452,12 @@ app.get('/v1/models', async (req, res) => {
                 owner = 'openai';
                 break;
             case 'puter':
-                if (dynamicPuterModels.length === 0 && !puterModelsFetched) {
-                    await fetchAndCachePuterModels();
-                }
+                // Puter has a different logic based on sub-providers, keep as is for now.
                 if (filter === 'puter') {
-                    modelsList = dynamicPuterModels;
+                    modelsList = puterModels;
                 } else {
-                    modelsList = dynamicPuterModels.filter(m => m.startsWith(`${filter}/`));
+                    modelsList = puterModels.filter(m => m.startsWith(`${filter}/`));
                 }
-                break;
-            case 'rtm':
-                modelsList = rtmModels;
-                owner = 'rtm';
                 break;
             default:
                 return res.status(500).json({ error: 'Internal server error: Invalid provider context.' });
@@ -584,8 +502,8 @@ app.post('/v1/chat/completions', async (req, res) => {
       }
     }
     const uid = userId;
-    if (reroutedGptModels.includes(model)) {
-        const apiParams = { ask: ask, model: model, api_key: HAJI_OPENAI_API_KEY, uid, roleplay, stream: false, };
+    if (gpt5Models.includes(model)) {
+        const apiParams = { ask: ask, model: model, api_key: HAJI_PUTER_API_KEY, uid, roleplay, stream: false, };
         const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 240000 });
         const apiResponse = response.data;
         if (!apiResponse || !apiResponse.answer) { throw new Error('Received an invalid response from the external Puter API for a GPT-5 model.'); }
@@ -692,12 +610,6 @@ app.post('/v1/chat/completions', async (req, res) => {
         } else {
             res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
         }
-        return;
-    } else if (rtmModels.includes(model)) {
-        const response = await axios.get(`${HAJI_RTM_URL}/${encodeURIComponent(ask)}?model=${model}`, { timeout: 240000 });
-        const answer = response.data;
-        const completionId = `chatcmpl-${Date.now()}`;
-        res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
         return;
     } else if (openAIModels.includes(model)) {
         let finalImageUrl = null;
@@ -811,12 +723,9 @@ app.post('/v1/images/generations', async (req, res) => {
 });
 
 // Initialize the database and create tables
-initializeDatabase().then(() => {
-    fetchRtmModels();
-    fetchAndCachePuterModels();
-});
+initializeDatabase();
 
-const server = app.listen(PORT, () => {
+app.listen(PORT, () => {
   console.log(`OpenAI-compatible proxy server is running on http://localhost:${PORT}`);
   const requiredVars = [
     'HAJI_API_KEY', 'IMGBB_API_KEY', 'HAJI_GEMINI_API_KEY', 'HAJI_PUTER_API_KEY', 'HAJI_OPENAI_API_KEY',
@@ -828,12 +737,5 @@ const server = app.listen(PORT, () => {
     missingVars.forEach(v => console.warn(`- ${v}`));
     console.warn('The application will likely fail without them.\n');
   }
-});
-
-process.on('SIGINT', () => {
-    console.log('SIGINT signal received: closing HTTP server');
-    server.close(() => {
-        console.log('HTTP server closed');
-    });
 });
 }
