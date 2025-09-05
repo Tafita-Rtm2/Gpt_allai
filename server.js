@@ -11,9 +11,6 @@ const crypto = require('crypto');
 const cluster = require('cluster');
 const os = require('os');
 
-const NEW_PUTER_URL = 'https://proxy-embed.vercel.app/api/puter';
-const NEW_PUTER_API_KEY = '48c35242c334bc9eb1d9cb69a0da33855ac87f33b9a806b4cb6af3ea508da435';
-
 const numCPUs = os.cpus().length;
 
 if (cluster.isPrimary) {
@@ -283,11 +280,11 @@ const fetchAndCachePuterModels = async () => {
 
     try {
         console.log('Fetching Puter models from API...');
-        const response = await axios.get(NEW_PUTER_URL, {
+        const response = await axios.get(HAJI_PUTER_URL, {
             params: {
                 ask: 'hello',
                 model: 'anthropic/claude-3.7-sonnet',
-                api_key: NEW_PUTER_API_KEY,
+                api_key: HAJI_PUTER_API_KEY,
                 uid: '1'
             },
             timeout: 10000 // 10 seconds timeout
@@ -576,8 +573,8 @@ app.post('/v1/chat/completions', async (req, res) => {
     }
     const uid = userId;
     if (gpt5Models.includes(model)) {
-        const apiParams = { ask: ask, model: model, api_key: NEW_PUTER_API_KEY, uid, roleplay, stream: false, };
-        const response = await axios.get(NEW_PUTER_URL, { params: apiParams, timeout: 240000 });
+        const apiParams = { ask: ask, model: model, api_key: HAJI_PUTER_API_KEY, uid, roleplay, stream: false, };
+        const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 240000 });
         const apiResponse = response.data;
         if (!apiResponse || !apiResponse.answer) { throw new Error('Received an invalid response from the external Puter API for a GPT-5 model.'); }
         const modelUsed = apiResponse.model_used || model;
@@ -663,8 +660,8 @@ app.post('/v1/chat/completions', async (req, res) => {
         }
         return;
     } else if (puterModels.includes(model)) {
-        const apiParams = { ask: ask, model: model, api_key: NEW_PUTER_API_KEY, uid, roleplay, stream: false, };
-        const response = await axios.get(NEW_PUTER_URL, { params: apiParams, timeout: 240000 });
+        const apiParams = { ask: ask, model: model, api_key: HAJI_PUTER_API_KEY, uid, roleplay, stream: false, };
+        const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 240000 });
         const apiResponse = response.data;
         if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from Puter API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external Puter API.'); }
         const modelUsed = apiResponse.model_used || model;
