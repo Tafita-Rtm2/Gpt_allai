@@ -572,7 +572,7 @@ app.post('/v1/chat/completions', async (req, res) => {
       }
     }
     const uid = userId;
-    if (gpt5Models.includes(model)) {
+    if (model.startsWith('openai/gpt-5')) {
         const apiParams = { ask: ask, model: model, api_key: HAJI_OPENAI_API_KEY, uid, roleplay, stream: false, };
         const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 240000 });
         const apiResponse = response.data;
