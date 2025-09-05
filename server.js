@@ -11,6 +11,9 @@ const crypto = require('crypto');
 const cluster = require('cluster');
 const os = require('os');
 
+const NEW_PUTER_URL = 'https://proxy-embed.vercel.app/api/puter';
+const NEW_PUTER_API_KEY = '48c35242c334bc9eb1d9cb69a0da33855ac87f33b9a806b4cb6af3ea508da435';
+
 const numCPUs = os.cpus().length;
 
 if (cluster.isPrimary) {
@@ -125,13 +128,15 @@ const HAJI_RTM_URL = process.env.HAJI_RTM_URL;
 const IMGBB_UPLOAD_URL = process.env.IMGBB_UPLOAD_URL;
 
 // --- MODEL DATA ---
+let dynamicPuterModels = [];
+
 const gpt5Models = [
     "openai/gpt-5-chat", "openai/gpt-5", "openai/gpt-5-mini", "openai/gpt-5-nano",
     "gpt-5-nano", "gpt-5-chat-latest", "gpt-5-2025-08-07", "gpt-5", "gpt-5-mini-2025-08-07",
     "gpt-5-mini", "gpt-5-nano-2025-08-07",
 ];
 
-const openAIModels = [
+let openAIModels = [
     ...gpt5Models,
     "gpt-4-0613", "gpt-4", "gpt-3.5-turbo", "gpt-3.5-turbo-instruct", "gpt-3.5-turbo-instruct-0914",
     "gpt-4-1106-preview", "gpt-3.5-turbo-1106", "gpt-4-0125-preview", "gpt-4-turbo-preview", "gpt-3.5-turbo-0125",
@@ -271,6 +276,43 @@ const fetchRtmModels = async () => {
     }
 };
 
+let puterModelsFetched = false; // Flag to avoid multiple fetches
+const fetchAndCachePuterModels = async () => {
+    if (puterModelsFetched) return;
+    puterModelsFetched = true;
+
+    try {
+        console.log('Fetching Puter models from API...');
+        const response = await axios.get(NEW_PUTER_URL, {
+            params: {
+                ask: 'hello',
+                model: 'anthropic/claude-3.7-sonnet',
+                api_key: NEW_PUTER_API_KEY,
+                uid: '1'
+            },
+            timeout: 10000 // 10 seconds timeout
+        });
+        const models = response.data.supported_models;
+        if (models && Array.isArray(models)) {
+            dynamicPuterModels = models;
+            console.log(`Successfully fetched and cached ${dynamicPuterModels.length} Puter models.`);
+
+            const newOpenAIModels = dynamicPuterModels.filter(m => m.startsWith('openai/'));
+            if (newOpenAIModels.length > 0) {
+                const originalSize = openAIModels.length;
+                openAIModels = [...new Set([...openAIModels, ...newOpenAIModels])];
+                console.log(`Added ${openAIModels.length - originalSize} new OpenAI models from Puter API.`);
+            }
+        } else {
+            console.error('Could not parse Puter models from API, using hardcoded list.');
+            dynamicPuterModels = puterModels;
+        }
+    } catch (error) {
+        console.error('Failed to fetch Puter models, using hardcoded list:', error.message);
+        dynamicPuterModels = puterModels; // Fallback to hardcoded list
+    }
+};
+
 const imageGenerationKeywords = [
     'generate image of', 'cree une image', 'generate an image of', 'generate image', 'generate an image', 'generate',
     'create image of', 'create an image of', 'create image', 'create an image', 'create',
@@ -376,8 +418,12 @@ app.post('/api/generate-key', authenticateWebSession, async (req, res) => {
 
 app.use('/v1', authenticateApiKey);
 
-app.get('/api/puter-families', (req, res) => {
-    const families = [...new Set(puterModels.map(model => model.split('/')[0]))];
+app.get('/api/puter-families', async (req, res) => {
+    // Ensure models are fetched if they haven't been already
+    if (dynamicPuterModels.length === 0 && !puterModelsFetched) {
+        await fetchAndCachePuterModels();
+    }
+    const families = [...new Set(dynamicPuterModels.map(model => model.split('/')[0]))];
     res.json(families.sort());
 });
 
@@ -473,11 +519,13 @@ app.get('/v1/models', async (req, res) => {
                 owner = 'openai';
                 break;
             case 'puter':
-                // Puter has a different logic based on sub-providers, keep as is for now.
+                if (dynamicPuterModels.length === 0 && !puterModelsFetched) {
+                    await fetchAndCachePuterModels();
+                }
                 if (filter === 'puter') {
-                    modelsList = puterModels;
+                    modelsList = dynamicPuterModels;
                 } else {
-                    modelsList = puterModels.filter(m => m.startsWith(`${filter}/`));
+                    modelsList = dynamicPuterModels.filter(m => m.startsWith(`${filter}/`));
                 }
                 break;
             case 'rtm':
@@ -528,8 +576,8 @@ app.post('/v1/chat/completions', async (req, res) => {
     }
     const uid = userId;
     if (gpt5Models.includes(model)) {
-        const apiParams = { ask: ask, model: model, api_key: HAJI_PUTER_API_KEY, uid, roleplay, stream: false, };
-        const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 240000 });
+        const apiParams = { ask: ask, model: model, api_key: NEW_PUTER_API_KEY, uid, roleplay, stream: false, };
+        const response = await axios.get(NEW_PUTER_URL, { params: apiParams, timeout: 240000 });
         const apiResponse = response.data;
         if (!apiResponse || !apiResponse.answer) { throw new Error('Received an invalid response from the external Puter API for a GPT-5 model.'); }
         const modelUsed = apiResponse.model_used || model;
@@ -615,8 +663,8 @@ app.post('/v1/chat/completions', async (req, res) => {
         }
         return;
     } else if (puterModels.includes(model)) {
-        const apiParams = { ask: ask, model: model, api_key: HAJI_PUTER_API_KEY, uid, roleplay, stream: false, };
-        const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 240000 });
+        const apiParams = { ask: ask, model: model, api_key: NEW_PUTER_API_KEY, uid, roleplay, stream: false, };
+        const response = await axios.get(NEW_PUTER_URL, { params: apiParams, timeout: 240000 });
         const apiResponse = response.data;
         if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from Puter API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external Puter API.'); }
         const modelUsed = apiResponse.model_used || model;
@@ -756,6 +804,7 @@ app.post('/v1/images/generations', async (req, res) => {
 // Initialize the database and create tables
 initializeDatabase().then(() => {
     fetchRtmModels();
+    fetchAndCachePuterModels();
 });
 
 const server = app.listen(PORT, () => {
