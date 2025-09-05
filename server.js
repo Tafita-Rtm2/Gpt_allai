@@ -126,15 +126,9 @@ const IMGBB_UPLOAD_URL = process.env.IMGBB_UPLOAD_URL;
 
 // --- MODEL DATA ---
 let dynamicPuterModels = [];
-
-const gpt5Models = [
-    "openai/gpt-5-chat", "openai/gpt-5", "openai/gpt-5-mini", "openai/gpt-5-nano",
-    "gpt-5-nano", "gpt-5-chat-latest", "gpt-5-2025-08-07", "gpt-5", "gpt-5-mini-2025-08-07",
-    "gpt-5-mini", "gpt-5-nano-2025-08-07",
-];
+let reroutedGptModels = [];
 
 let openAIModels = [
-    ...gpt5Models,
     "gpt-4-0613", "gpt-4", "gpt-3.5-turbo", "gpt-3.5-turbo-instruct", "gpt-3.5-turbo-instruct-0914",
     "gpt-4-1106-preview", "gpt-3.5-turbo-1106", "gpt-4-0125-preview", "gpt-4-turbo-preview", "gpt-3.5-turbo-0125",
     "gpt-4-turbo", "gpt-4-turbo-2024-04-09", "gpt-4o", "gpt-4o-2024-05-13", "gpt-4o-mini-2024-07-18", "gpt-4o-mini",
@@ -294,12 +288,18 @@ const fetchAndCachePuterModels = async () => {
             dynamicPuterModels = models;
             console.log(`Successfully fetched and cached ${dynamicPuterModels.length} Puter models.`);
 
+            // Find all OpenAI models from the dynamic list
             const newOpenAIModels = dynamicPuterModels.filter(m => m.startsWith('openai/'));
             if (newOpenAIModels.length > 0) {
                 const originalSize = openAIModels.length;
                 openAIModels = [...new Set([...openAIModels, ...newOpenAIModels])];
                 console.log(`Added ${openAIModels.length - originalSize} new OpenAI models from Puter API.`);
             }
+
+            // Specifically find and cache the GPT-5 models that need rerouting
+            reroutedGptModels = newOpenAIModels.filter(m => m.startsWith('openai/gpt-5'));
+            console.log(`Found and cached ${reroutedGptModels.length} GPT-5 models for special routing.`);
+
         } else {
             console.error('Could not parse Puter models from API, using hardcoded list.');
             dynamicPuterModels = puterModels;
@@ -572,7 +572,7 @@ app.post('/v1/chat/completions', async (req, res) => {
       }
     }
     const uid = userId;
-    if (model.startsWith('openai/gpt-5')) {
+    if (reroutedGptModels.includes(model)) {
         const apiParams = { ask: ask, model: model, api_key: HAJI_OPENAI_API_KEY, uid, roleplay, stream: false, };
         const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 240000 });
         const apiResponse = response.data;
