@@ -82,7 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const requestBody = { provider: selectedProvider };
             if (selectedProvider === 'chatgpt5') {
                 requestBody.provider = 'puter';
-                requestBody.sub_provider = 'openai/gpt-5-chat';
+                requestBody.sub_provider = 'openai';
             } else if (selectedProvider === 'puter') {
                 const selectedFamilyInput = document.querySelector('input[name="puter-family"]:checked');
                 if (selectedFamilyInput && selectedFamilyInput.value) {
