@@ -80,10 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
             generateKeyButton.disabled = true;
 
             const requestBody = { provider: selectedProvider };
-            if (selectedProvider === 'chatgpt5') {
-                requestBody.provider = 'puter';
-                requestBody.sub_provider = 'openai';
-            } else if (selectedProvider === 'puter') {
+            if (selectedProvider === 'puter') {
                 const selectedFamilyInput = document.querySelector('input[name="puter-family"]:checked');
                 if (selectedFamilyInput && selectedFamilyInput.value) {
                     requestBody.sub_provider = selectedFamilyInput.value;
