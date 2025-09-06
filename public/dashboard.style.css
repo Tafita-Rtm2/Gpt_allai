@@ -166,6 +166,11 @@ select:focus, input[type="search"]:focus {
     width: 24px;
 }
 
+.gpt5-option {
+    font-weight: bold;
+    color: #a855f7; /* A nice purple color */
+}
+
 #generate-key-button {
     width: 100%;
     padding: 0.9rem;
