@@ -5,82 +5,50 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Welcome - RTM AI Proxy</title>
     <link rel="stylesheet" href="new-style.css">
-    <link href="httpshttps://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="main-container">
-        <div class="form-section">
-            <div class="auth-container">
-                <div class="auth-form-wrapper" id="login-form-wrapper">
-                    <header>
-                        <h1>Welcome Back!</h1>
-                        <p>Log in to access your dashboard.</p>
-                    </header>
-                    <form id="login-form">
-                        <div class="input-group">
-                            <label for="login-email">Email</label>
-                            <input type="email" id="login-email" required>
-                        </div>
-                        <div class="input-group">
-                            <label for="login-password">Password</label>
-                            <input type="password" id="login-password" required>
-                        </div>
-                        <button type="submit" class="btn-primary">Log In</button>
-                        <p class="message" id="login-message"></p>
-                    </form>
-                    <p class="toggle-link">
-                        Don't have an account? <a href="#" id="show-register">Sign up</a>
-                    </p>
+    <div class="auth-container">
+        <div class="auth-wrapper">
+            <!-- Login Form -->
+            <div class="auth-form-wrapper" id="login-form-wrapper">
+                <div class="form-header">
+                    <h2>Welcome Back</h2>
+                    <p>Enter your credentials to access your account.</p>
                 </div>
-
-                <div class="auth-form-wrapper hidden" id="register-form-wrapper">
-                    <header>
-                        <h1>Create Account</h1>
-                        <p>Get started by creating a new account.</p>
-                    </header>
-                    <form id="register-form">
-                        <div class="input-group">
-                            <label for="register-email">Email</label>
-                            <input type="email" id="register-email" required>
-                        </div>
-                        <div class="input-group">
-                            <label for="register-password">Password</label>
-                            <input type="password" id="register-password" required>
-                        </div>
-                        <button type="submit" class="btn-primary">Sign Up</button>
-                        <p class="message" id="register-message"></p>
-                    </form>
-                    <p class="toggle-link">
-                        Already have an account? <a href="#" id="show-login">Log in</a>
-                    </p>
+                <form id="login-form" class="form-body">
+                    <div class="input-group">
+                        <input type="email" id="login-email" placeholder="Email" required>
+                    </div>
+                    <div class="input-group">
+                        <input type="password" id="login-password" placeholder="Password" required>
+                    </div>
+                    <button type="submit" class="auth-button">Login</button>
+                    <p class="message" id="login-message"></p>
+                </form>
+                <div class="form-footer">
+                    <p>Don't have an account? <a href="#" id="show-register">Sign Up</a></p>
                 </div>
             </div>
-        </div>
-        <div class="info-section">
-            <div class="info-content">
-                <h2>RTM AI Proxy 🚀</h2>
-                <p>
-                    Bienvenue sur votre portail unifié vers l'intelligence artificielle de demain. Notre service de proxy vous offre un accès simplifié, rapide et sécurisé aux modèles d'IA les plus puissants du monde, le tout avec une seule clé API. Fini la complexité, place à l'innovation !
-                </p>
-                <div class="features">
-                    <h3>Fonctionnalités Clés ✨</h3>
-                    <ul>
-                        <li><i class="bi bi-key-fill"></i> <strong>API Unifiée :</strong> Une seule clé pour gouverner tous les modèles. Simplifiez votre code et votre gestion de clés.</li>
-                        <li><i class="bi bi-lightning-charge-fill"></i> <strong>Haute Performance :</strong> Infrastructure optimisée pour des réponses rapides et une faible latence.</li>
-                        <li><i class="bi bi-shield-lock-fill"></i> <strong>Sécurité Renforcée :</strong> Vos clés et vos données sont protégées. Nous ne journalisons pas vos requêtes.</li>
-                        <li><i class="bi bi-gem"></i> <strong>Accès Exclusif :</strong> Profitez des modèles les plus récents et performants dès leur sortie.</li>
-                    </ul>
+
+            <!-- Registration Form -->
+            <div class="auth-form-wrapper hidden" id="register-form-wrapper">
+                <div class="form-header">
+                    <h2>Create Account</h2>
+                    <p>Join us and get access to the best AI models.</p>
                 </div>
-                <div class="contact">
-                    <h3>Contactez-nous 💬</h3>
-                    <p><i class="bi bi-person-circle"></i> RTM Tafitaniaina</p>
-                    <p><i class="bi bi-telephone-fill"></i> 033 61 777 72 / 038 58 583 30</p>
-                    <p><a href="mailto:niainatafita85@gmail.com"><i class="bi bi-envelope-fill"></i> niainatafita85@gmail.com</a></p>
-                    <p>
-                        <a href="http://facebook.com/rtm.tafitaniaina" aria-label="Facebook"><i class="bi bi-facebook"></i></a> &nbsp;
-                        <a href="https://wa.me/261385858330" aria-label="WhatsApp"><i class="bi bi-whatsapp"></i></a> &nbsp;
-                        <a href="https://t.me/rtm_tafitaniaina" aria-label="Telegram"><i class="bi bi-telegram"></i></a>
-                    </p>
+                <form id="register-form" class="form-body">
+                    <div class="input-group">
+                        <input type="email" id="register-email" placeholder="Email" required>
+                    </div>
+                    <div class="input-group">
+                        <input type="password" id="register-password" placeholder="Password" required>
+                    </div>
+                    <button type="submit" class="auth-button">Sign Up</button>
+                    <p class="message" id="register-message"></p>
+                </form>
+                <div class="form-footer">
+                    <p>Already have an account? <a href="#" id="show-login">Login</a></p>
                 </div>
             </div>
         </div>

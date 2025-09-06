@@ -45,6 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     logoUrl = 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/icons/gear.svg';
                     break;
                 case 'openai':
+                case 'chatgpt5':
                     logoUrl = 'assets/openai.svg';
                     break;
                 case 'puter':
@@ -79,7 +80,10 @@ document.addEventListener('DOMContentLoaded', () => {
             generateKeyButton.disabled = true;
 
             const requestBody = { provider: selectedProvider };
-             if (selectedProvider === 'puter') {
+            if (selectedProvider === 'chatgpt5') {
+                requestBody.provider = 'puter';
+                requestBody.sub_provider = 'openai/gpt-5-chat';
+            } else if (selectedProvider === 'puter') {
                 const selectedFamilyInput = document.querySelector('input[name="puter-family"]:checked');
                 if (selectedFamilyInput && selectedFamilyInput.value) {
                     requestBody.sub_provider = selectedFamilyInput.value;
