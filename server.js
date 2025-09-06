@@ -125,14 +125,7 @@ const HAJI_RTM_URL = process.env.HAJI_RTM_URL;
 const IMGBB_UPLOAD_URL = process.env.IMGBB_UPLOAD_URL;
 
 // --- MODEL DATA ---
-const gpt5Models = [
-    "openai/gpt-5-chat", "openai/gpt-5", "openai/gpt-5-mini", "openai/gpt-5-nano",
-    "gpt-5-nano", "gpt-5-chat-latest", "gpt-5-2025-08-07", "gpt-5", "gpt-5-mini-2025-08-07",
-    "gpt-5-mini", "gpt-5-nano-2025-08-07",
-];
-
 const openAIModels = [
-    ...gpt5Models,
     "gpt-4-0613", "gpt-4", "gpt-3.5-turbo", "gpt-3.5-turbo-instruct", "gpt-3.5-turbo-instruct-0914",
     "gpt-4-1106-preview", "gpt-3.5-turbo-1106", "gpt-4-0125-preview", "gpt-4-turbo-preview", "gpt-3.5-turbo-0125",
     "gpt-4-turbo", "gpt-4-turbo-2024-04-09", "gpt-4o", "gpt-4o-2024-05-13", "gpt-4o-mini-2024-07-18", "gpt-4o-mini",
@@ -512,7 +505,7 @@ app.get('/v1/models', async (req, res) => {
                 owner = 'openai';
                 break;
             case 'chatgpt5':
-                modelsList = puterModels.filter(m => m.startsWith('openai/'));
+                modelsList = puterModels.filter(m => m.startsWith('openai/gpt-5'));
                 owner = 'openai';
                 break;
             case 'puter':
@@ -544,7 +537,7 @@ app.get('/v1/models', async (req, res) => {
 });
 
 app.post('/v1/chat/completions', async (req, res) => {
-  const { userId } = req.authInfo;
+  const { userId, providerContext } = req.authInfo;
   const { model, messages, stream, max_tokens, google_api_key } = req.body;
 
   if (!messages || messages.length === 0) {
@@ -570,7 +563,8 @@ app.post('/v1/chat/completions', async (req, res) => {
       }
     }
     const uid = userId;
-    if (gpt5Models.includes(model)) {
+
+    if (providerContext === 'chatgpt5' || providerContext === 'puter') {
         const apiParams = { ask: ask, model: model, api_key: HAJI_PUTER_API_KEY, uid, roleplay, stream: false, };
         const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 240000 });
         const apiResponse = response.data;
@@ -590,6 +584,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         }
         return;
     }
+
     const lowerCaseAsk = ask.toLowerCase().trim();
     const triggerKeyword = imageGenerationKeywords.find(keyword => lowerCaseAsk === keyword || lowerCaseAsk.startsWith(keyword + ' '));
     if (triggerKeyword && !imageUrl) {
@@ -640,28 +635,6 @@ app.post('/v1/chat/completions', async (req, res) => {
         const response = await axios.get(HAJI_GEMINI_URL, { params: apiParams, timeout: 240000 });
         const apiResponse = response.data;
         if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from Gemini API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external Gemini API.'); }
-        const modelUsed = apiResponse.model_used || model;
-        const answer = apiResponse.answer;
-        const completionId = `chatcmpl-${Date.now()}`;
-        if (stream) {
-            res.setHeader('Content-Type', 'text/event-stream');
-            const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
-            res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
-            const contentChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { content: answer }, finish_reason: null }] };
-            res.write(`data: ${JSON.stringify(contentChunk)}\n\n`);
-            const stopChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
-            res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
-            res.write('data: [DONE]\n\n');
-            res.end();
-        } else {
-            res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
-        }
-        return;
-    } else if (puterModels.includes(model)) {
-        const apiParams = { ask: ask, model: model, api_key: HAJI_PUTER_API_KEY, uid, roleplay, stream: false, };
-        const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 240000 });
-        const apiResponse = response.data;
-        if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from Puter API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external Puter API.'); }
         const modelUsed = apiResponse.model_used || model;
         const answer = apiResponse.answer;
         const completionId = `chatcmpl-${Date.now()}`;
