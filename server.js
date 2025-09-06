@@ -164,7 +164,8 @@ const geminiModels = [
     "gemma-3n-e2b-it", "gemini-2.5-flash-lite", "gemini-2.5-flash-image-preview"
 ];
 const puterModels = [
-    "openrouter/sonoma-dusk-alpha", "openrouter/sonoma-sky-alpha", "qwen/qwen3-max", "moonshotai/kimi-k2-0905",
+    "openrouter/sonoma-dusk-alpha", "openai/gpt-5-chat", "openai/gpt-5", "openai/gpt-5-mini", "openai/gpt-5-nano",
+    "gpt-5-nano", "openrouter/sonoma-sky-alpha", "qwen/qwen3-max", "moonshotai/kimi-k2-0905",
     "bytedance/seed-oss-36b-instruct", "deepcogito/cogito-v2-preview-llama-109b-moe", "deepcogito/cogito-v2-preview-deepseek-671b",
     "stepfun-ai/step3", "qwen/qwen3-30b-a3b-thinking-2507", "x-ai/grok-code-fast-1", "nousresearch/hermes-4-70b",
     "nousresearch/hermes-4-405b", "google/gemini-2.5-flash-image-preview", "deepseek/deepseek-chat-v3.1",
