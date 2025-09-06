@@ -382,6 +382,10 @@ app.post('/api/generate-key', authenticateWebSession, async (req, res) => {
         case 'openai':
             backendKey = backendKeys.openai;
             break;
+        case 'chatgpt5':
+            backendKey = backendKeys.puter;
+            prefix = 'openai';
+            break;
         case 'puter':
             backendKey = backendKeys.puter;
             if (sub_provider) {
@@ -504,6 +508,10 @@ app.get('/v1/models', async (req, res) => {
                     console.error("Failed to fetch dynamic models for OpenAI, falling back to hardcoded list.", e.message);
                     modelsList = openAIModels;
                 }
+                owner = 'openai';
+                break;
+            case 'chatgpt5':
+                modelsList = puterModels.filter(m => m.startsWith('openai/'));
                 owner = 'openai';
                 break;
             case 'puter':
