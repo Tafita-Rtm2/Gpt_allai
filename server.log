@@ -1,17 +1,1 @@
-Primary 2509 is running
-OpenAI-compatible proxy server is running on http://localhost:3000
-OpenAI-compatible proxy server is running on http://localhost:3000
-OpenAI-compatible proxy server is running on http://localhost:3000
-OpenAI-compatible proxy server is running on http://localhost:3000
-Connected to the PostgreSQL database.
-Connected to the PostgreSQL database.
-Connected to the PostgreSQL database.
-Users table is ready.
-Users table is ready.
-Users table is ready.
-API keys table is ready.
-API keys table is ready.
-API keys table is ready.
-Chat history table removed if it existed.
-Chat history table removed if it existed.
-Chat history table removed if it existed.
+Primary 3612 is running
