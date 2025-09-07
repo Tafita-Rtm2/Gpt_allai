@@ -13,14 +13,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Toggle between Login and Register forms ---
     showRegisterLink.addEventListener('click', (e) => {
         e.preventDefault();
-        loginFormWrapper.classList.add('hidden');
-        registerFormWrapper.classList.remove('hidden');
+        loginFormWrapper.classList.remove('active');
+        registerFormWrapper.classList.add('active');
     });
 
     showLoginLink.addEventListener('click', (e) => {
         e.preventDefault();
-        registerFormWrapper.classList.add('hidden');
-        loginFormWrapper.classList.remove('hidden');
+        registerFormWrapper.classList.remove('active');
+        loginFormWrapper.classList.add('active');
     });
 
     // --- Handle Registration ---
@@ -46,9 +46,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             setMessage(registerMessage, 'Account created! Please log in.', 'success');
             setTimeout(() => {
-                registerFormWrapper.classList.add('hidden');
-                loginFormWrapper.classList.remove('hidden');
+                registerFormWrapper.classList.remove('active');
+                loginFormWrapper.classList.add('active');
                 document.getElementById('login-email').value = email; // Pre-fill email
+                registerMessage.textContent = ''; // Clear message
             }, 1500);
 
         } catch (error) {
@@ -93,9 +94,26 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Helper function to display messages
+    // --- Password Visibility Toggle ---
+    document.querySelectorAll(".toggle-pass").forEach(icon => {
+      icon.addEventListener("click", () => {
+        let input = icon.previousElementSibling;
+        if (input.type === "password") {
+          input.type = "text";
+          icon.classList.replace("bi-eye-slash", "bi-eye");
+        } else {
+          input.type = "password";
+          icon.classList.replace("bi-eye", "bi-eye-slash");
+        }
+      });
+    });
+
+    // --- Helper function to display messages ---
     function setMessage(element, text, type) {
         element.textContent = text;
-        element.className = `message ${type}`;
+        element.className = 'message'; // Reset classes
+        if (text) {
+            element.classList.add(type); // Add type class like 'success' or 'error'
+        }
     }
 });
