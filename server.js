@@ -32,6 +32,9 @@ if (cluster.isPrimary) {
 app.use(cors());
 app.use(express.static('public'));
 
+const apiKeyCache = new Map();
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] Received ${req.method} request for ${req.url}`);
   next();
@@ -121,6 +124,8 @@ const HAJI_GEMINI_URL = process.env.HAJI_GEMINI_URL;
 const HAJI_PUTER_URL = process.env.HAJI_PUTER_URL;
 const HAJI_OPENAI_URL = process.env.HAJI_OPENAI_URL;
 const HAJI_IMAGEN_URL = process.env.HAJI_IMAGEN_URL;
+const HAJI_POLLINATION_URL = process.env.HAJI_POLLINATION_URL;
+const HAJI_FLUXWEBUI_URL = process.env.HAJI_FLUXWEBUI_URL;
 const HAJI_RTM_URL = process.env.HAJI_RTM_URL;
 const IMGBB_UPLOAD_URL = process.env.IMGBB_UPLOAD_URL;
 
@@ -322,6 +327,14 @@ const authenticateApiKey = async (req, res, next) => {
     }
     const compoundKey = authHeader.split(' ')[1];
 
+    // Check cache first
+    if (apiKeyCache.has(compoundKey)) {
+        req.authInfo = apiKeyCache.get(compoundKey);
+        console.log(`[Cache] HIT for key: ...${compoundKey.slice(-4)}`);
+        return next();
+    }
+     console.log(`[Cache] MISS for key: ...${compoundKey.slice(-4)}`);
+
     try {
         const keyResult = await db.query('SELECT user_id, provider FROM api_keys WHERE api_key = $1', [compoundKey]);
         if (keyResult.rows.length === 0) {
@@ -333,12 +346,22 @@ const authenticateApiKey = async (req, res, next) => {
         const filter = keyParts[0];
         const backendKey = keyParts.length > 1 ? keyParts.slice(1).join('--') : null;
 
-        req.authInfo = {
+        const authInfo = {
             userId: keyRecord.user_id,
             providerContext: keyRecord.provider,
             filter: filter,
             backendKey: backendKey,
         };
+
+        // Store in cache with TTL
+        apiKeyCache.set(compoundKey, authInfo);
+        setTimeout(() => {
+            apiKeyCache.delete(compoundKey);
+            console.log(`[Cache] Expired and removed key: ...${compoundKey.slice(-4)}`);
+        }, CACHE_TTL);
+
+        req.authInfo = authInfo;
+
         if (keyRecord.provider === 'rtm' && rtmModels.length === 0) {
             await fetchRtmModels();
         }
@@ -573,6 +596,32 @@ app.post('/v1/chat/completions', async (req, res) => {
     }
     const uid = userId;
     if (gpt5Models.includes(model)) {
+        const lowerCaseAsk = ask.toLowerCase().trim();
+        const triggerKeyword = imageGenerationKeywords.find(keyword => lowerCaseAsk === keyword || lowerCaseAsk.startsWith(keyword + ' '));
+        if (triggerKeyword && !imageUrl) {
+            const prompt = ask.substring(triggerKeyword.length).trim();
+            const imageResponse = await axios.get(HAJI_FLUXWEBUI_URL, { params: { prompt, width: 1024, height: 1820, seed: Date.now(), nologo: true, nofeed: true, api_key: HAJI_PUTER_API_KEY }, responseType: 'arraybuffer', timeout: 240000 });
+            const base64Data = Buffer.from(imageResponse.data, 'binary').toString('base64');
+            const form = new FormData();
+            form.append('image', base64Data);
+            const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders(), timeout: 240000 });
+            if (!imgbbResponse.data || !imgbbResponse.data.success) { throw new Error('Failed to upload generated image to ImgBB.'); }
+            const generatedImageUrl = imgbbResponse.data.data.url;
+            const responseContent = `![Generated Image](${generatedImageUrl})`;
+            const completionId = `chatcmpl-gen-${Date.now()}`;
+            if (stream) {
+                res.setHeader('Content-Type', 'text/event-stream');
+                res.write(`data: ${JSON.stringify({ id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] })}\n\n`);
+                res.write(`data: ${JSON.stringify({ id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: { content: responseContent }, finish_reason: null }] })}\n\n`);
+                res.write(`data: ${JSON.stringify({ id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })}\n\n`);
+                res.write('data: [DONE]\n\n');
+                res.end();
+            } else {
+                res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, message: { role: 'assistant', content: responseContent }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
+            }
+            return;
+        }
+
         const fullModelName = model.startsWith('openai/') ? model : `openai/${model}`;
         const apiParams = { ask: ask, model: fullModelName, api_key: HAJI_PUTER_API_KEY, uid, roleplay, stream: false, };
         const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 240000 });
@@ -600,6 +649,8 @@ app.post('/v1/chat/completions', async (req, res) => {
       let imageResponse;
       if (openAIModels.includes(model)) {
         imageResponse = await axios.get(HAJI_IMAGEN_URL, { params: { prompt: prompt, model: 'dall-e-3', api_key: HAJI_OPENAI_API_KEY, }, responseType: 'arraybuffer', timeout: 240000 });
+      } else if (geminiModels.includes(model)) {
+        imageResponse = await axios.get(HAJI_POLLINATION_URL, { params: { prompt, width: 1024, height: 1820, seed: Date.now(), model: 'flux', nologo: true, enhance: false, api_key: HAJI_GEMINI_API_KEY }, responseType: 'arraybuffer', timeout: 240000 });
       } else {
         imageResponse = await axios.get(HAJI_FLUX_URL, { params: { prompt, api_key: HAJI_API_KEY, uid }, responseType: 'arraybuffer', timeout: 240000 });
       }
