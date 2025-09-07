@@ -385,7 +385,7 @@ app.post('/api/generate-key', authenticateWebSession, async (req, res) => {
             break;
         case 'chatgpt5':
             backendKey = backendKeys.puter;
-            prefix = 'openai';
+            prefix = 'gpt5';
             break;
         case 'puter':
             backendKey = backendKeys.puter;
