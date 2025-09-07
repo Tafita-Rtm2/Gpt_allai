@@ -1,290 +1,90 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RTM AI Proxy - Login</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-  <style>
-    /* ===== Reset ===== */
-    *{margin:0;padding:0;box-sizing:border-box;}
-    body{
-      font-family:"Segoe UI",Roboto,sans-serif;
-      background:radial-gradient(circle at top,#0f172a,#020617);
-      color:#e2e8f0;
-      min-height:100vh;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      padding-bottom:90px;
-    }
-
-    /* ===== Formulaire ===== */
-    .auth-container{
-      margin-top:40px;
-      background:rgba(30,41,59,0.85);
-      padding:30px 25px;
-      border-radius:20px;
-      box-shadow:0 6px 30px rgba(0,0,0,0.6);
-      width:100%;
-      max-width:360px;
-      text-align:center;
-    }
-    .auth-container h1{font-size:22px;color:#38bdf8;margin-bottom:8px;}
-    .auth-container p{font-size:14px;color:#cbd5e1;margin-bottom:20px;}
-    .input-group{display:flex;flex-direction:column;gap:6px;margin-bottom:15px;text-align:left;}
-    .input-group label{font-size:14px;color:#94a3b8;}
-    .input-group input{
-      padding:12px;
-      border:none;
-      border-radius:12px;
-      background:rgba(15,23,42,0.9);
-      color:#f8fafc;
-    }
-    .input-group input:focus{outline:none;box-shadow:0 0 8px #3b82f6;}
-    .btn-primary{
-      width:100%;
-      padding:12px;
-      border:none;
-      border-radius:12px;
-      font-weight:600;
-      background:linear-gradient(90deg,#2563eb,#7c3aed,#06b6d4);
-      color:white;
-      cursor:pointer;
-      transition:.3s;
-    }
-    .btn-primary:hover{filter:brightness(1.2);transform:translateY(-2px);}
-    .toggle-link{margin-top:15px;font-size:14px;}
-    .toggle-link a{color:#38bdf8;text-decoration:none;}
-    .toggle-link a:hover{text-decoration:underline;}
-
-    /* ===== Section Info ===== */
-    .info-section{
-      margin-top:40px;
-      max-width:900px;
-      padding:30px;
-      background:rgba(17,25,40,0.6);
-      border-radius:20px;
-      box-shadow:0 4px 20px rgba(0,0,0,0.5);
-    }
-    .info-section h2{color:#60a5fa;margin-bottom:15px;text-align:center;}
-    .info-section p{font-size:15px;line-height:1.6;margin-bottom:20px;color:#e2e8f0;text-align:center;}
-    .features h3,.contact h3{margin-bottom:12px;color:#38bdf8;}
-    .features ul{list-style:none;display:flex;flex-direction:column;gap:10px;margin-bottom:20px;}
-    .features li{display:flex;align-items:center;gap:8px;font-size:14px;}
-    .features i{color:#22d3ee;font-size:18px;}
-    .contact p,.contact a{font-size:14px;color:#cbd5e1;}
-    .contact a{text-decoration:none;}
-    .contact a:hover{color:#38bdf8;}
-    .contact i{color:#7dd3fc;}
-
-    /* ===== Menu bas animé ===== */
-    .navigation{
-      position:fixed;
-      bottom:20px;
-      left:50%;
-      transform:translateX(-50%);
-      background:#1e293b;
-      width:350px;
-      height:70px;
-      border-radius:15px;
-      display:flex;
-      justify-content:space-around;
-      align-items:center;
-      box-shadow:0 4px 20px rgba(0,0,0,0.6);
-      z-index:10;
-    }
-    .navigation ul{
-      display:flex;
-      width:100%;
-      justify-content:space-around;
-    }
-    .navigation ul li{
-      list-style:none;
-      width:70px;
-      height:70px;
-      position:relative;
-    }
-    .navigation ul li a{
-      display:flex;
-      flex-direction:column;
-      justify-content:center;
-      align-items:center;
-      text-decoration:none;
-      color:#cbd5e1;
-      width:100%;
-      height:100%;
-      font-size:22px;
-      transition:.3s;
-    }
-    .navigation ul li.active a{color:#22d3ee;}
-    .indicator{
-      position:absolute;
-      top:-35px;
-      width:60px;
-      height:60px;
-      background:#22d3ee;
-      border-radius:50%;
-      border:6px solid #0f172a;
-      transition:.5s;
-      left:25px;
-    }
-    .navigation ul li:nth-child(1).active ~ .indicator{transform:translateX(calc(70px*0));}
-    .navigation ul li:nth-child(2).active ~ .indicator{transform:translateX(calc(70px*1));}
-    .navigation ul li:nth-child(3).active ~ .indicator{transform:translateX(calc(70px*2));}
-    .navigation ul li:nth-child(4).active ~ .indicator{transform:translateX(calc(70px*3));}
-    .navigation ul li:nth-child(5).active ~ .indicator{transform:translateX(calc(70px*4));}
-
-    /* ===== Popups ===== */
-    .popup{
-      position:fixed;
-      bottom:100px;
-      left:50%;
-      transform:translateX(-50%) scale(0.8);
-      background:rgba(15,23,42,0.95);
-      border-radius:20px;
-      padding:20px;
-      width:300px;
-      max-width:90%;
-      box-shadow:0 6px 30px rgba(0,0,0,0.7);
-      opacity:0;
-      pointer-events:none;
-      transition:all .4s ease;
-      z-index:20;
-    }
-    .popup.active{
-      opacity:1;
-      pointer-events:auto;
-      transform:translateX(-50%) scale(1);
-    }
-    .popup h3{
-      margin-bottom:10px;
-      color:#38bdf8;
-      font-size:18px;
-      text-align:center;
-    }
-    .popup p{font-size:14px;color:#cbd5e1;line-height:1.4;text-align:center;}
-    .popup select{
-      width:100%;
-      margin-top:10px;
-      padding:10px;
-      border-radius:10px;
-      border:none;
-      background:#1e293b;
-      color:white;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome - RTM AI Proxy</title>
+    <link rel="stylesheet" href="new-style.css">
+    <link href="httpshttps://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
 </head>
 <body>
+    <div class="main-container">
+        <div class="form-section">
+            <div class="auth-container">
+                <div class="auth-form-wrapper" id="login-form-wrapper">
+                    <header>
+                        <h1>Welcome Back!</h1>
+                        <p>Log in to access your dashboard.</p>
+                    </header>
+                    <form id="login-form">
+                        <div class="input-group">
+                            <label for="login-email">Email</label>
+                            <input type="email" id="login-email" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="login-password">Password</label>
+                            <input type="password" id="login-password" required>
+                        </div>
+                        <button type="submit" class="btn-primary">Log In</button>
+                        <p class="message" id="login-message"></p>
+                    </form>
+                    <p class="toggle-link">
+                        Don't have an account? <a href="#" id="show-register">Sign up</a>
+                    </p>
+                </div>
 
-  <!-- ===== Formulaire Login ===== -->
-  <div class="auth-container">
-    <h1>Bienvenue 👋</h1>
-    <p>Connectez-vous pour accéder à votre tableau de bord</p>
-    <form>
-      <div class="input-group">
-        <label for="login-email">Email</label>
-        <input type="email" id="login-email" required>
-      </div>
-      <div class="input-group">
-        <label for="login-password">Mot de passe</label>
-        <input type="password" id="login-password" required>
-      </div>
-      <button type="submit" class="btn-primary">Connexion</button>
-    </form>
-    <p class="toggle-link">Pas encore de compte ? <a href="#">Créer un compte</a></p>
-  </div>
-
-  <!-- ===== Description & Contact ===== -->
-  <div class="info-section">
-    <h2>RTM AI Proxy 🚀</h2>
-    <p>
-      Unifiez l’accès aux modèles d’intelligence artificielle les plus puissants. Une seule clé API, des performances optimisées et une sécurité renforcée.
-    </p>
-    <div class="features">
-      <h3>Fonctionnalités Clés ✨</h3>
-      <ul>
-        <li><i class="bi bi-key-fill"></i> API Unifiée</li>
-        <li><i class="bi bi-lightning-charge-fill"></i> Haute Performance</li>
-        <li><i class="bi bi-shield-lock-fill"></i> Sécurité Renforcée</li>
-        <li><i class="bi bi-gem"></i> Accès Exclusif</li>
-      </ul>
+                <div class="auth-form-wrapper hidden" id="register-form-wrapper">
+                    <header>
+                        <h1>Create Account</h1>
+                        <p>Get started by creating a new account.</p>
+                    </header>
+                    <form id="register-form">
+                        <div class="input-group">
+                            <label for="register-email">Email</label>
+                            <input type="email" id="register-email" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="register-password">Password</label>
+                            <input type="password" id="register-password" required>
+                        </div>
+                        <button type="submit" class="btn-primary">Sign Up</button>
+                        <p class="message" id="register-message"></p>
+                    </form>
+                    <p class="toggle-link">
+                        Already have an account? <a href="#" id="show-login">Log in</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="info-section">
+            <div class="info-content">
+                <h2>RTM AI Proxy 🚀</h2>
+                <p>
+                    Bienvenue sur votre portail unifié vers l'intelligence artificielle de demain. Notre service de proxy vous offre un accès simplifié, rapide et sécurisé aux modèles d'IA les plus puissants du monde, le tout avec une seule clé API. Fini la complexité, place à l'innovation !
+                </p>
+                <div class="features">
+                    <h3>Fonctionnalités Clés ✨</h3>
+                    <ul>
+                        <li><i class="bi bi-key-fill"></i> <strong>API Unifiée :</strong> Une seule clé pour gouverner tous les modèles. Simplifiez votre code et votre gestion de clés.</li>
+                        <li><i class="bi bi-lightning-charge-fill"></i> <strong>Haute Performance :</strong> Infrastructure optimisée pour des réponses rapides et une faible latence.</li>
+                        <li><i class="bi bi-shield-lock-fill"></i> <strong>Sécurité Renforcée :</strong> Vos clés et vos données sont protégées. Nous ne journalisons pas vos requêtes.</li>
+                        <li><i class="bi bi-gem"></i> <strong>Accès Exclusif :</strong> Profitez des modèles les plus récents et performants dès leur sortie.</li>
+                    </ul>
+                </div>
+                <div class="contact">
+                    <h3>Contactez-nous 💬</h3>
+                    <p><i class="bi bi-person-circle"></i> RTM Tafitaniaina</p>
+                    <p><i class="bi bi-telephone-fill"></i> 033 61 777 72 / 038 58 583 30</p>
+                    <p><a href="mailto:niainatafita85@gmail.com"><i class="bi bi-envelope-fill"></i> niainatafita85@gmail.com</a></p>
+                    <p>
+                        <a href="http://facebook.com/rtm.tafitaniaina" aria-label="Facebook"><i class="bi bi-facebook"></i></a> &nbsp;
+                        <a href="https://wa.me/261385858330" aria-label="WhatsApp"><i class="bi bi-whatsapp"></i></a> &nbsp;
+                        <a href="https://t.me/rtm_tafitaniaina" aria-label="Telegram"><i class="bi bi-telegram"></i></a>
+                    </p>
+                </div>
+            </div>
+        </div>
     </div>
-    <div class="contact">
-      <h3>Contact 💬</h3>
-      <p><i class="bi bi-person-circle"></i> RTM Tafitaniaina</p>
-      <p><i class="bi bi-telephone-fill"></i> 033 61 777 72 / 038 58 583 30</p>
-      <p><a href="mailto:niainatafita85@gmail.com"><i class="bi bi-envelope-fill"></i> niainatafita85@gmail.com</a></p>
-      <p>
-        <a href="http://facebook.com/rtm.tafitaniaina"><i class="bi bi-facebook"></i></a>&nbsp;
-        <a href="https://wa.me/261385858330"><i class="bi bi-whatsapp"></i></a>&nbsp;
-        <a href="https://t.me/rtm_tafitaniaina"><i class="bi bi-telegram"></i></a>
-      </p>
-    </div>
-  </div>
-
-  <!-- ===== Menu flottant bas ===== -->
-  <div class="navigation">
-    <ul>
-      <li class="active"><a href="#" data-popup="home"><i class="bi bi-house-door"></i></a></li>
-      <li><a href="#" data-popup="profile"><i class="bi bi-person"></i></a></li>
-      <li><a href="#" data-popup="chat"><i class="bi bi-chat-dots"></i></a></li>
-      <li><a href="#" data-popup="gallery"><i class="bi bi-image"></i></a></li>
-      <li><a href="#" data-popup="settings"><i class="bi bi-gear"></i></a></li>
-      <div class="indicator"></div>
-    </ul>
-  </div>
-
-  <!-- ===== Popups ===== -->
-  <div id="popup-home" class="popup">
-    <h3>Accueil 🏠</h3>
-    <p>Bienvenue sur RTM AI Proxy. Accédez facilement à l’IA de demain.</p>
-  </div>
-
-  <div id="popup-profile" class="popup">
-    <h3>Profil 👤</h3>
-    <p>Gérez vos informations personnelles et vos accès sécurisés.</p>
-  </div>
-
-  <div id="popup-chat" class="popup">
-    <h3>Chat 💬</h3>
-    <p>Discutez avec notre IA ou contactez le support technique.</p>
-  </div>
-
-  <div id="popup-gallery" class="popup">
-    <h3>Galerie 🖼️</h3>
-    <p>Découvrez nos visuels et ressources exclusives.</p>
-  </div>
-
-  <div id="popup-settings" class="popup">
-    <h3>Paramètres ⚙️</h3>
-    <p>Personnalisez votre expérience.</p>
-    <label for="lang">Langue :</label>
-    <select id="lang">
-      <option>Français</option>
-      <option>English</option>
-      <option>Malgache</option>
-    </select>
-  </div>
-
-  <script>
-    // Gestion navigation + popup
-    const list = document.querySelectorAll('.navigation ul li');
-    const popups = document.querySelectorAll('.popup');
-
-    function activeLink(){
-      list.forEach((item)=>item.classList.remove('active'));
-      this.classList.add('active');
-
-      // fermer tous les popups
-      popups.forEach(p=>p.classList.remove('active'));
-
-      const popupId = this.querySelector("a").getAttribute("data-popup");
-      if(popupId){
-        document.getElementById("popup-"+popupId).classList.add("active");
-      }
-    }
-    list.forEach((item)=>item.addEventListener('click',activeLink));
-  </script>
+    <script src="script.js"></script>
 </body>
 </html>
