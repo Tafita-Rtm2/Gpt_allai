@@ -125,3 +125,86 @@ form {
   font-weight: 600;
   text-decoration: none;
 }
+
+/* FEATURES, TUTORIALS, AND CONTACT SECTIONS */
+.features-container, .tutorials-container, .contact-container {
+  padding: 2rem;
+  background: #f9f9f9;
+}
+
+.features-container h2, .tutorials-container h2, .contact-container h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+  color: #333;
+  text-align: center;
+}
+
+.feature, .tutorial {
+  margin-bottom: 1.5rem;
+  padding: 1.5rem;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.feature h3, .tutorial h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: #555;
+}
+
+.feature p, .tutorial p {
+  color: #777;
+}
+
+.video-placeholder, .screenshot-placeholder {
+  width: 100%;
+  max-width: 100%; /* Ensure it's responsive */
+  height: auto; /* Let aspect ratio be maintained */
+  background: #e0e0e0;
+  border-radius: 8px;
+  display: block; /* Instead of flex */
+  margin-top: 1rem;
+  border: 1px dashed #ccc;
+}
+
+img.screenshot-placeholder {
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    color: #999;
+}
+
+video.video-placeholder {
+    aspect-ratio: 16 / 9;
+    background-color: #000;
+}
+
+.contact-container {
+  text-align: center;
+}
+
+.contact-container p {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+  font-size: 1rem;
+}
+
+.contact-container i {
+  font-size: 1.2rem;
+  margin-right: 1rem;
+  color: #7900ff;
+}
+
+.contact-container a {
+  color: #333;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.contact-container a:hover {
+  text-decoration: underline;
+}
