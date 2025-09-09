@@ -3,17 +3,21 @@
 body {
   font-family: "Poppins", sans-serif;
   background: #1a1a2e;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+.page-container {
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+  background: #fff;
 }
 
 /* MAIN AUTH CONTAINER */
 .auth-container {
   position: relative;
   width: 100%;
-  max-width: 420px;
   height: 100vh;
   background: #fff;
   overflow: hidden;
@@ -130,6 +134,7 @@ form {
 .features-container, .tutorials-container, .contact-container {
   padding: 2rem;
   background: #f9f9f9;
+  border-top: 1px solid #e0e0e0;
 }
 
 .features-container h2, .tutorials-container h2, .contact-container h2 {

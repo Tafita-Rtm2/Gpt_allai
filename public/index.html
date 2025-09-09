@@ -9,80 +9,82 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet"/>
 </head>
 <body class="fluid-auth-bg">
-  <div class="auth-container">
-    <!-- LOGIN -->
-    <div class="auth-box active" id="login-form-wrapper">
-      <div class="fluid-bg"></div>
+  <div class="page-container">
+    <div class="auth-container">
+      <!-- LOGIN -->
+      <div class="auth-box active" id="login-form-wrapper">
+        <div class="fluid-bg"></div>
 
-      <div class="logo-container">
-          <div class="logo-wrapper">
-              <img src="assets/rtmlogo.jpg" alt="RTM Logo">
+        <div class="logo-container">
+            <div class="logo-wrapper">
+                <img src="assets/rtmlogo.jpg" alt="RTM Logo">
+            </div>
+        </div>
+
+        <h1>Welcome Back</h1>
+        <form id="login-form">
+          <div class="input-group">
+            <i class="bi bi-envelope-fill"></i>
+            <input type="email" id="login-email" placeholder="Email Address" required/>
           </div>
+          <div class="input-group">
+            <i class="bi bi-lock-fill"></i>
+            <input type="password" id="login-password" placeholder="Password" required/>
+            <i class="bi bi-eye-slash toggle-pass"></i>
+          </div>
+          <div id="login-message" class="message"></div>
+          <a href="#" class="forgot">Forgot Password?</a>
+          <button type="submit" class="btn"><i class="bi bi-box-arrow-in-right"></i> Sign in</button>
+        </form>
+        <p class="switch">Don’t have an account? <a href="#" id="show-register">Sign up</a></p>
       </div>
 
-      <h1>Welcome Back</h1>
-      <form id="login-form">
-        <div class="input-group">
-          <i class="bi bi-envelope-fill"></i>
-          <input type="email" id="login-email" placeholder="Email Address" required/>
-        </div>
-        <div class="input-group">
-          <i class="bi bi-lock-fill"></i>
-          <input type="password" id="login-password" placeholder="Password" required/>
-          <i class="bi bi-eye-slash toggle-pass"></i>
-        </div>
-        <div id="login-message" class="message"></div>
-        <a href="#" class="forgot">Forgot Password?</a>
-        <button type="submit" class="btn"><i class="bi bi-box-arrow-in-right"></i> Sign in</button>
-      </form>
-      <p class="switch">Don’t have an account? <a href="#" id="show-register">Sign up</a></p>
-    </div>
+      <!-- SIGNUP -->
+      <div class="auth-box" id="register-form-wrapper">
+        <div class="fluid-bg"></div>
 
-    <!-- SIGNUP -->
-    <div class="auth-box" id="register-form-wrapper">
-      <div class="fluid-bg"></div>
+        <div class="logo-container">
+            <div class="logo-wrapper">
+                <img src="assets/rtmlogo.jpg" alt="RTM Logo">
+            </div>
+        </div>
 
-      <div class="logo-container">
-          <div class="logo-wrapper">
-              <img src="assets/rtmlogo.jpg" alt="RTM Logo">
+        <h1>Sign up</h1>
+        <form id="register-form">
+          <div class="input-group">
+            <i class="bi bi-envelope-fill"></i>
+            <input type="email" id="register-email" placeholder="Email Address" required/>
           </div>
+          <div class="input-group">
+            <i class="bi bi-lock-fill"></i>
+            <input type="password" id="register-password" placeholder="Password" required/>
+            <i class="bi bi-eye-slash toggle-pass"></i>
+          </div>
+          <div id="register-message" class="message"></div>
+          <button type="submit" class="btn"><i class="bi bi-person-plus-fill"></i> Create Account</button>
+        </form>
+        <p class="switch">Already have an account? <a href="#" id="show-login">Log in</a></p>
       </div>
+    </div>
 
-      <h1>Sign up</h1>
-      <form id="register-form">
-        <div class="input-group">
-          <i class="bi bi-envelope-fill"></i>
-          <input type="email" id="register-email" placeholder="Email Address" required/>
-        </div>
-        <div class="input-group">
-          <i class="bi bi-lock-fill"></i>
-          <input type="password" id="register-password" placeholder="Password" required/>
-          <i class="bi bi-eye-slash toggle-pass"></i>
-        </div>
-        <div id="register-message" class="message"></div>
-        <button type="submit" class="btn"><i class="bi bi-person-plus-fill"></i> Create Account</button>
-      </form>
-      <p class="switch">Already have an account? <a href="#" id="show-login">Log in</a></p>
-    </div>
-  </div>
-
-  <div class="features-container">
-    <h2>Fonctionnalités de notre service</h2>
-    <div class="feature">
-      <h3>Génération de clés API</h3>
-      <p>Générez des clés API pour une multitude de modèles d'IA, y compris OpenAI, Gemini, Claude et bien d'autres. Accédez à la puissance de l'IA avec une seule clé.</p>
-    </div>
-    <div class="feature">
-      <h3>Historique des clés</h3>
-      <p>Consultez l'historique de toutes vos clés générées. Ne perdez jamais la trace de vos clés et gérez-les facilement.</p>
-    </div>
-    <div class="feature">
-      <h3>Gestion facile</h3>
-      <p>Supprimez les clés dont vous n'avez plus besoin en un seul clic. Gardez votre compte propre et sécurisé.</p>
-    </div>
-    <div class="feature">
-      <h3>Modèles supportés</h3>
-      <p>Nous supportons une large gamme de modèles d'IA, et nous en ajoutons constamment de nouveaux. Restez à la pointe de la technologie avec notre service.</p>
+    <div class="features-container">
+      <h2>Fonctionnalités de notre service</h2>
+      <div class="feature">
+        <h3>Génération de clés API</h3>
+        <p>Générez des clés API pour une multitude de modèles d'IA, y compris OpenAI, Gemini, Claude et bien d'autres. Accédez à la puissance de l'IA avec une seule clé.</p>
+      </div>
+      <div class="feature">
+        <h3>Historique des clés</h3>
+        <p>Consultez l'historique de toutes vos clés générées. Ne perdez jamais la trace de vos clés et gérez-les facilement.</p>
+      </div>
+      <div class="feature">
+        <h3>Gestion facile</h3>
+        <p>Supprimez les clés dont vous n'avez plus besoin en un seul clic. Gardez votre compte propre et sécurisé.</p>
+      </div>
+      <div class="feature">
+        <h3>Modèles supportés</h3>
+        <p>Nous supportons une large gamme de modèles d'IA, et nous en ajoutons constamment de nouveaux. Restez à la pointe de la technologie avec notre service.</p>
+      </div>
     </div>
 
     <div class="tutorials-container">
