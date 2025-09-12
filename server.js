@@ -598,7 +598,6 @@ app.post('/v1/chat/completions', async (req, res) => {
     if (gpt5Models.includes(model)) {
         const lowerCaseAsk = ask.toLowerCase().trim();
         const triggerKeyword = imageGenerationKeywords.find(keyword => lowerCaseAsk === keyword || lowerCaseAsk.startsWith(keyword + ' '));
-
         if (triggerKeyword && !imageUrl) {
             const prompt = ask.substring(triggerKeyword.length).trim();
             const imageResponse = await axios.get(HAJI_FLUXWEBUI_URL, { params: { prompt, width: 1024, height: 1820, seed: 1757183203232, nologo: true, nofeed: true, api_key: HAJI_PUTER_API_KEY }, responseType: 'arraybuffer', timeout: 600000 });
@@ -610,26 +609,35 @@ app.post('/v1/chat/completions', async (req, res) => {
             const generatedImageUrl = imgbbResponse.data.data.url;
             const responseContent = `![Generated Image](${generatedImageUrl})`;
             const completionId = `chatcmpl-gen-${Date.now()}`;
-            // This is an image response, which is never streamed in this implementation.
-            // We send the markdown link as a single response.
-            return res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, message: { role: 'assistant', content: responseContent }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
+            if (stream) {
+                res.setHeader('Content-Type', 'text/event-stream');
+                res.write(`data: ${JSON.stringify({ id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] })}\n\n`);
+                res.write(`data: ${JSON.stringify({ id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: { content: responseContent }, finish_reason: null }] })}\n\n`);
+                res.write(`data: ${JSON.stringify({ id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })}\n\n`);
+                res.write('data: [DONE]\n\n');
+                res.end();
+            } else {
+                res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, message: { role: 'assistant', content: responseContent }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
+            }
+            return;
         }
 
-        // Handle text generation (streaming or non-streaming)
         const fullModelName = model.startsWith('openai/') ? model : `openai/${model}`;
-        const apiParams = { ask: ask, model: fullModelName, api_key: HAJI_PUTER_API_KEY, uid, roleplay, stream: !!stream };
-
+        const apiParams = { ask: ask, model: fullModelName, api_key: HAJI_PUTER_API_KEY, uid, roleplay, stream: false, };
+        const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 600000 });
+        const apiResponse = response.data;
+        if (!apiResponse || !apiResponse.answer) { throw new Error('Received an invalid response from the external Puter API for a GPT-5 model.'); }
+        const modelUsed = apiResponse.model_used || model;
+        const answer = apiResponse.answer;
+        const completionId = `chatcmpl-${Date.now()}`;
         if (stream) {
-            const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, responseType: 'stream', timeout: 600000 });
             res.setHeader('Content-Type', 'text/event-stream');
-            response.data.pipe(res);
+            res.write(`data: ${JSON.stringify({ id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] })}\n\n`);
+            res.write(`data: ${JSON.stringify({ id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { content: answer }, finish_reason: null }] })}\n\n`);
+            res.write(`data: ${JSON.stringify({ id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
         } else {
-            const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 600000 });
-            const apiResponse = response.data;
-            if (!apiResponse || !apiResponse.answer) { throw new Error('Received an invalid response from the external Puter API for a GPT-5 model.'); }
-            const modelUsed = apiResponse.model_used || model;
-            const answer = apiResponse.answer;
-            const completionId = `chatcmpl-${Date.now()}`;
             res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
         }
         return;
