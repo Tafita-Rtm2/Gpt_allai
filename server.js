@@ -483,14 +483,14 @@ app.get('/v1/models', async (req, res) => {
         switch (providerContext) {
             case 'claude':
                 try {
-                    const response = await axios.get(HAJI_ANTHROPIC_URL, {
-                        params: { ask: 'hello', model: 'claude-3-opus-20240229', api_key: backendKey, uid: req.authInfo.userId },
+                    const response = await axios.get("https://rapido.zetsu.xyz/api/anthropic", {
+                        params: { q: 'hello', model: 'claude-opus-4-20250514', uid: req.authInfo.userId },
                         timeout: 600000,
                     });
-                    if (response.data && Array.isArray(response.data.supported_models)) {
-                        modelsList = response.data.supported_models;
+                    if (response.data && Array.isArray(response.data.models)) {
+                        modelsList = response.data.models;
                     } else {
-                        throw new Error('Could not retrieve supported models from Claude API.');
+                        throw new Error('Could not retrieve models from Claude API.');
                     }
                 } catch (e) {
                     console.error("Failed to fetch dynamic models for Claude, falling back to hardcoded list.", e.message);
@@ -501,12 +501,12 @@ app.get('/v1/models', async (req, res) => {
                 break;
             case 'gemini':
                 try {
-                     const response = await axios.get(HAJI_GEMINI_URL, {
-                        params: { ask: 'hello', model: 'gemini-1.5-pro-latest', api_key: backendKey, uid: req.authInfo.userId },
+                     const response = await axios.get("https://rapido.zetsu.xyz/api/gemini", {
+                        params: { query: 'hello', model: 'gemini-1.5-flash', uid: req.authInfo.userId },
                         timeout: 600000,
                     });
-                    if (response.data && Array.isArray(response.data.supported_models)) {
-                        modelsList = response.data.supported_models;
+                    if (response.data && Array.isArray(response.data.available_models)) {
+                        modelsList = response.data.available_models;
                     } else {
                         // If the proxy doesn't return a model list, use the hardcoded one.
                         modelsList = geminiModels;
@@ -519,12 +519,12 @@ app.get('/v1/models', async (req, res) => {
                 break;
             case 'openai':
                  try {
-                     const response = await axios.get(HAJI_OPENAI_URL, {
-                        params: { ask: 'hello', model: 'gpt-4', api_key: backendKey, uid: req.authInfo.userId },
+                     const response = await axios.get("https://rapido.zetsu.xyz/api/openai", {
+                        params: { query: 'hello', model: 'gpt-4o', uid: req.authInfo.userId },
                         timeout: 600000,
                     });
-                    if (response.data && Array.isArray(response.data.supported_models)) {
-                        modelsList = response.data.supported_models;
+                    if (response.data && Array.isArray(response.data.available_models)) {
+                        modelsList = response.data.available_models;
                     } else {
                         modelsList = openAIModels;
                     }
@@ -677,25 +677,12 @@ app.post('/v1/chat/completions', async (req, res) => {
       return;
     }
     if (geminiModels.includes(model)) {
-        let finalImageUrl = null;
-        if (imageUrl) {
-            if (imageUrl.startsWith('data:image')) {
-                const base64Data = imageUrl.replace(/^data:image\/[a-z]+;base64,/, "");
-                const form = new FormData();
-                form.append('image', base64Data);
-                const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders(), timeout: 600000 });
-                if (imgbbResponse.data && imgbbResponse.data.success) { finalImageUrl = imgbbResponse.data.data.url; } else { throw new Error('Failed to upload image to ImgBB.'); }
-            } else {
-                finalImageUrl = imageUrl;
-            }
-        }
-        const apiParams = { ask: ask, model: model, api_key: HAJI_GEMINI_API_KEY, uid, roleplay, max_tokens: max_tokens || '', google_api_key: google_api_key || '', };
-        if (finalImageUrl) apiParams.file_url = finalImageUrl;
-        const response = await axios.get(HAJI_GEMINI_URL, { params: apiParams, timeout: 600000 });
+        const apiParams = { query: ask, model: model, uid, roleplay };
+        const response = await axios.get("https://rapido.zetsu.xyz/api/gemini", { params: apiParams, timeout: 600000 });
         const apiResponse = response.data;
-        if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from Gemini API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external Gemini API.'); }
-        const modelUsed = apiResponse.model_used || model;
-        const answer = apiResponse.answer;
+        if (!apiResponse || !apiResponse.response) { console.error('Invalid response from Gemini API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external Gemini API.'); }
+        const modelUsed = apiResponse.model || model;
+        const answer = apiResponse.response;
         const completionId = `chatcmpl-${Date.now()}`;
         if (stream) {
             res.setHeader('Content-Type', 'text/event-stream');
@@ -740,25 +727,12 @@ app.post('/v1/chat/completions', async (req, res) => {
         res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
         return;
     } else if (openAIModels.includes(model)) {
-        let finalImageUrl = null;
-        if (imageUrl) {
-            if (imageUrl.startsWith('data:image')) {
-                const base64Data = imageUrl.replace(/^data:image\/[a-z]+;base64,/, "");
-                const form = new FormData();
-                form.append('image', base64Data);
-                const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders(), timeout: 600000 });
-                if (imgbbResponse.data && imgbbResponse.data.success) { finalImageUrl = imgbbResponse.data.data.url; } else { throw new Error('Failed to upload image to ImgBB.'); }
-            } else {
-                finalImageUrl = imageUrl;
-            }
-        }
-        const apiParams = { ask: ask, model: model, api_key: HAJI_OPENAI_API_KEY, uid, roleplay, max_tokens: max_tokens || '', };
-        if (finalImageUrl) apiParams.img_url = finalImageUrl;
-        const response = await axios.get(HAJI_OPENAI_URL, { params: apiParams, timeout: 600000 });
+        const apiParams = { query: ask, model: model, uid, roleplay };
+        const response = await axios.get("https://rapido.zetsu.xyz/api/openai", { params: apiParams, timeout: 600000 });
         const apiResponse = response.data;
-        if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from OpenAI API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external OpenAI API.'); }
-        const modelUsed = apiResponse.model_used || model;
-        const answer = apiResponse.answer;
+        if (!apiResponse || !apiResponse.response) { console.error('Invalid response from OpenAI API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external OpenAI API.'); }
+        const modelUsed = apiResponse.model || model;
+        const answer = apiResponse.response;
         const completionId = `chatcmpl-${Date.now()}`;
         if (stream) {
             res.setHeader('Content-Type', 'text/event-stream');
@@ -791,13 +765,13 @@ app.post('/v1/chat/completions', async (req, res) => {
         finalImageUrl = imageUrl;
       }
     }
-    const apiParams = { ask, model, api_key: HAJI_API_KEY, uid };
-    if (finalImageUrl) apiParams.img_url = finalImageUrl;
-    const response = await axios.get(HAJI_ANTHROPIC_URL, { params: apiParams, timeout: 600000 });
+    const apiParams = { q: ask, model, uid, max_tokens: max_tokens || '' };
+    if (finalImageUrl) apiParams.image = finalImageUrl;
+    const response = await axios.get("https://rapido.zetsu.xyz/api/anthropic", { params: apiParams, timeout: 600000 });
     const apiResponse = response.data;
-    if (!apiResponse || !apiResponse.answer) { throw new Error('Received an invalid response from the external API.'); }
-    const modelUsed = apiResponse.model_used || model;
-    const answer = apiResponse.answer;
+    if (!apiResponse || !apiResponse.response) { throw new Error('Received an invalid response from the external API.'); }
+    const modelUsed = apiResponse.model || model;
+    const answer = apiResponse.response;
     const completionId = `chatcmpl-${Date.now()}`;
     if (stream) {
       res.setHeader('Content-Type', 'text/event-stream');
