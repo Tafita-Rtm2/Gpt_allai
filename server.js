@@ -484,7 +484,7 @@ if (cluster.isPrimary) {
                     try {
                         const response = await axios.get(RAPIDO_ANTHROPIC_URL, {
                             params: { q: 'hello', model: 'claude-opus-4-20250514', uid: req.authInfo.userId },
-                            timeout: 600000,
+                            // timeout: 600000, // Désactivé
                         });
                         if (response.data && Array.isArray(response.data.models)) {
                             modelsList = response.data.models;
@@ -502,7 +502,7 @@ if (cluster.isPrimary) {
                     try {
                          const response = await axios.get(RAPIDO_GEMINI_URL, {
                             params: { query: 'hello', model: 'gemini-1.5-flash', uid: req.authInfo.userId },
-                            timeout: 600000,
+                            // timeout: 600000, // Désactivé
                         });
                         if (response.data && Array.isArray(response.data.available_models)) {
                             modelsList = response.data.available_models;
@@ -520,7 +520,7 @@ if (cluster.isPrimary) {
                      try {
                          const response = await axios.get(RAPIDO_OPENAI_URL, {
                             params: { query: 'hello', model: 'gpt-4o', uid: req.authInfo.userId },
-                            timeout: 600000,
+                            // timeout: 600000, // Désactivé
                         });
                         if (response.data && Array.isArray(response.data.available_models)) {
                             modelsList = response.data.available_models;
@@ -599,13 +599,13 @@ if (cluster.isPrimary) {
             const triggerKeyword = imageGenerationKeywords.find(keyword => lowerCaseAsk === keyword || lowerCaseAsk.startsWith(keyword + ' '));
             if (triggerKeyword && !imageUrl) {
                 const prompt = ask.substring(triggerKeyword.length).trim();
-                const imageResponse = await axios.get(HAJI_FLUXWEBUI_URL, { params: { prompt, width: 1024, height: 1820, seed: 1757183203232, nologo: true, nofeed: true, api_key: HAJI_PUTER_API_KEY }, responseType: 'arraybuffer', timeout: 600000 });
+                const imageResponse = await axios.get(HAJI_FLUXWEBUI_URL, { params: { prompt, width: 1024, height: 1820, seed: 1757183203232, nologo: true, nofeed: true, api_key: HAJI_PUTER_API_KEY }, responseType: 'arraybuffer', /* timeout: 600000 */ }); // Désactivé
                 const base64Data = Buffer.from(imageResponse.data, 'binary').toString('base64');
                 const form = new FormData();
                 form.append('key', FREEIMAGE_API_KEY);
                 form.append('action', 'upload');
                 form.append('source', base64Data);
-                const freeimageResponse = await axios.post(FREEIMAGE_UPLOAD_URL, form, { headers: form.getHeaders(), timeout: 600000 });
+                const freeimageResponse = await axios.post(FREEIMAGE_UPLOAD_URL, form, { headers: form.getHeaders(), /* timeout: 600000 */ }); // Désactivé
                 if (!freeimageResponse.data || freeimageResponse.data.status_code !== 200) { throw new Error('Failed to upload generated image to freeimage.host.'); }
                 const generatedImageUrl = freeimageResponse.data.image.url;
                 const responseContent = `![Generated Image](${generatedImageUrl})`;
@@ -625,7 +625,7 @@ if (cluster.isPrimary) {
 
             const fullModelName = model.startsWith('openai/') ? model : `openai/${model}`;
             const apiParams = { ask: ask, model: fullModelName, api_key: HAJI_PUTER_API_KEY, uid, roleplay, stream: false, };
-            const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 600000 });
+            const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, /* timeout: 600000 */ }); // Désactivé
             const apiResponse = response.data;
             if (!apiResponse || !apiResponse.answer) { throw new Error('Received an invalid response from the external Puter API for a GPT-5 model.'); }
             const modelUsed = apiResponse.model_used || model;
@@ -649,18 +649,18 @@ if (cluster.isPrimary) {
           const prompt = ask.substring(triggerKeyword.length).trim();
           let imageResponse;
           if (openAIModels.includes(model)) {
-            imageResponse = await axios.get(HAJI_IMAGEN_URL, { params: { prompt: prompt, model: 'dall-e-3', api_key: HAJI_OPENAI_API_KEY, }, responseType: 'arraybuffer', timeout: 600000 });
+            imageResponse = await axios.get(HAJI_IMAGEN_URL, { params: { prompt: prompt, model: 'dall-e-3', api_key: HAJI_OPENAI_API_KEY, }, responseType: 'arraybuffer', /* timeout: 600000 */ }); // Désactivé
           } else if (geminiModels.includes(model)) {
-            imageResponse = await axios.get(HAJI_POLLINATION_URL, { params: { prompt, width: 1024, height: 1820, seed: 1757183203234, model: 'flux', nologo: true, enhance: false, api_key: HAJI_GEMINI_API_KEY }, responseType: 'arraybuffer', timeout: 600000 });
+            imageResponse = await axios.get(HAJI_POLLINATION_URL, { params: { prompt, width: 1024, height: 1820, seed: 1757183203234, model: 'flux', nologo: true, enhance: false, api_key: HAJI_GEMINI_API_KEY }, responseType: 'arraybuffer', /* timeout: 600000 */ }); // Désactivé
           } else {
-            imageResponse = await axios.get(HAJI_FLUX_URL, { params: { prompt, api_key: HAJI_API_KEY, uid }, responseType: 'arraybuffer', timeout: 600000 });
+            imageResponse = await axios.get(HAJI_FLUX_URL, { params: { prompt, api_key: HAJI_API_KEY, uid }, responseType: 'arraybuffer', /* timeout: 600000 */ }); // Désactivé
           }
           const base64Data = Buffer.from(imageResponse.data, 'binary').toString('base64');
           const form = new FormData();
           form.append('key', FREEIMAGE_API_KEY);
           form.append('action', 'upload');
           form.append('source', base64Data);
-          const freeimageResponse = await axios.post(FREEIMAGE_UPLOAD_URL, form, { headers: form.getHeaders(), timeout: 600000 });
+          const freeimageResponse = await axios.post(FREEIMAGE_UPLOAD_URL, form, { headers: form.getHeaders(), /* timeout: 600000 */ }); // Désactivé
           if (!freeimageResponse.data || freeimageResponse.data.status_code !== 200) { throw new Error('Failed to upload generated image to freeimage.host.'); }
           const generatedImageUrl = freeimageResponse.data.image.url;
           const responseContent = `![Generated Image](${generatedImageUrl})`;
@@ -681,7 +681,7 @@ if (cluster.isPrimary) {
         }
         if (geminiModels.includes(model)) {
             const apiParams = { query: ask, model: model, uid, roleplay };
-            const response = await axios.get(RAPIDO_GEMINI_URL, { params: apiParams, timeout: 600000 });
+            const response = await axios.get(RAPIDO_GEMINI_URL, { params: apiParams, /* timeout: 600000 */ }); // Désactivé
             const apiResponse = response.data;
             if (!apiResponse || !apiResponse.response) { console.error('Invalid response from Gemini API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external Gemini API.'); }
             const modelUsed = apiResponse.model || model;
@@ -703,7 +703,7 @@ if (cluster.isPrimary) {
             return;
         } else if (openAIModels.includes(model)) {
             const apiParams = { query: ask, model: model, uid, roleplay };
-            const response = await axios.get(RAPIDO_OPENAI_URL, { params: apiParams, timeout: 600000 });
+            const response = await axios.get(RAPIDO_OPENAI_URL, { params: apiParams, /* timeout: 600000 */ }); // Désactivé
             const apiResponse = response.data;
             if (!apiResponse || !apiResponse.response) { console.error('Invalid response from OpenAI API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external OpenAI API.'); }
             const modelUsed = apiResponse.model || model;
@@ -725,7 +725,7 @@ if (cluster.isPrimary) {
             return;
         } else if (puterModels.includes(model)) {
             const apiParams = { ask: ask, model: model, api_key: HAJI_PUTER_API_KEY, uid, roleplay, stream: false, };
-            const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 600000 });
+            const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, /* timeout: 600000 */ }); // Désactivé
             const apiResponse = response.data;
             if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from Puter API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external Puter API.'); }
             const modelUsed = apiResponse.model_used || model;
@@ -746,7 +746,7 @@ if (cluster.isPrimary) {
             }
             return;
         } else if (rtmModels.includes(model)) {
-            const response = await axios.get(`${HAJI_RTM_URL}/${encodeURIComponent(ask)}?model=${model}`, { timeout: 600000 });
+            const response = await axios.get(`${HAJI_RTM_URL}/${encodeURIComponent(ask)}?model=${model}`, { /* timeout: 600000 */ }); // Désactivé
             const answer = response.data;
             const completionId = `chatcmpl-${Date.now()}`;
             res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
@@ -760,7 +760,7 @@ if (cluster.isPrimary) {
             form.append('key', FREEIMAGE_API_KEY);
             form.append('action', 'upload');
             form.append('source', base64Data);
-            const freeimageResponse = await axios.post(FREEIMAGE_UPLOAD_URL, form, { headers: form.getHeaders(), timeout: 600000 });
+            const freeimageResponse = await axios.post(FREEIMAGE_UPLOAD_URL, form, { headers: form.getHeaders(), /* timeout: 600000 */ }); // Désactivé
             if (freeimageResponse.data && freeimageResponse.data.status_code === 200) {
               finalImageUrl = freeimageResponse.data.image.url;
             } else {
@@ -772,7 +772,7 @@ if (cluster.isPrimary) {
         }
         const apiParams = { q: ask, model, uid, max_tokens: max_tokens || '' };
         if (finalImageUrl) apiParams.image = finalImageUrl;
-        const response = await axios.get(RAPIDO_ANTHROPIC_URL, { params: apiParams, timeout: 600000 });
+        const response = await axios.get(RAPIDO_ANTHROPIC_URL, { params: apiParams, /* timeout: 600000 */ }); // Désactivé
         const apiResponse = response.data;
         if (!apiResponse || !apiResponse.response) { throw new Error('Received an invalid response from the external API.'); }
         const modelUsed = apiResponse.model || model;
@@ -810,14 +810,14 @@ if (cluster.isPrimary) {
         const fluxResponse = await axios.get(HAJI_FLUX_URL, {
           params: { prompt, api_key: HAJI_API_KEY, uid },
           responseType: 'arraybuffer',
-          timeout: 600000
+          /* timeout: 600000 */ // Désactivé
         });
         const base64Data = Buffer.from(fluxResponse.data, 'binary').toString('base64');
         const form = new FormData();
         form.append('key', FREEIMAGE_API_KEY);
         form.append('action', 'upload');
         form.append('source', base64Data);
-        const freeimageResponse = await axios.post(FREEIMAGE_UPLOAD_URL, form, { headers: form.getHeaders(), timeout: 600000 });
+        const freeimageResponse = await axios.post(FREEIMAGE_UPLOAD_URL, form, { headers: form.getHeaders(), /* timeout: 600000 */ }); // Désactivé
         if (!freeimageResponse.data || freeimageResponse.data.status_code !== 200) {
           throw new Error('Failed to upload generated image to freeimage.host.');
         }
