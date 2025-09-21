@@ -126,7 +126,8 @@ if (cluster.isPrimary) {
     const HAJI_POLLINATION_URL = process.env.HAJI_POLLINATION_URL;
     const HAJI_FLUXWEBUI_URL = process.env.HAJI_FLUXWEBUI_URL;
     const HAJI_RTM_URL = process.env.HAJI_RTM_URL;
-    const FREEIMAGE_UPLOAD_URL = 'https://freeimage.host/api/1/upload';
+    const FREEIMAGE_UPLOAD_URL = process.env.FREEIMAGE_UPLOAD_URL;
+    const KAIZ_API_URL = process.env.KAIZ_API_URL;
 
     // --- MODEL DATA ---
     const gpt5Models = [...new Set([
@@ -651,9 +652,9 @@ if (cluster.isPrimary) {
           if (openAIModels.includes(model)) {
             imageResponse = await axios.get(HAJI_IMAGEN_URL, { params: { prompt: prompt, model: 'dall-e-3', api_key: HAJI_OPENAI_API_KEY, }, responseType: 'arraybuffer', /* timeout: 600000 */ }); // Désactivé
           } else if (geminiModels.includes(model)) {
-            imageResponse = await axios.get(HAJI_POLLINATION_URL, { params: { prompt, width: 1024, height: 1820, seed: 1757183203234, model: 'flux', nologo: true, enhance: false, api_key: HAJI_GEMINI_API_KEY }, responseType: 'arraybuffer', /* timeout: 600000 */ }); // Désactivé
+            imageResponse = await axios.get(KAIZ_API_URL, { params: { prompt, ratio: '3:4', stream: true, apikey: 'd1dc9369-0d12-4731-ada2-dd88f398382a' }, responseType: 'arraybuffer' });
           } else {
-            imageResponse = await axios.get(HAJI_FLUX_URL, { params: { prompt, api_key: HAJI_API_KEY, uid }, responseType: 'arraybuffer', /* timeout: 600000 */ }); // Désactivé
+            imageResponse = await axios.get(KAIZ_API_URL, { params: { prompt, ratio: '3:4', stream: true, apikey: 'd1dc9369-0d12-4731-ada2-dd88f398382a' }, responseType: 'arraybuffer' });
           }
           const base64Data = Buffer.from(imageResponse.data, 'binary').toString('base64');
           const form = new FormData();
@@ -770,7 +771,7 @@ if (cluster.isPrimary) {
             finalImageUrl = imageUrl;
           }
         }
-        const apiParams = { q: ask, model, uid, max_tokens: max_tokens || '' };
+        const apiParams = { q: ask, model, uid, max_tokens: 25000 };
         if (finalImageUrl) apiParams.image = finalImageUrl;
         const response = await axios.get(RAPIDO_ANTHROPIC_URL, { params: apiParams, /* timeout: 600000 */ }); // Désactivé
         const apiResponse = response.data;
@@ -807,10 +808,9 @@ if (cluster.isPrimary) {
       }
       const uid = user || `anonymous-user-${Date.now()}`;
       try {
-        const fluxResponse = await axios.get(HAJI_FLUX_URL, {
-          params: { prompt, api_key: HAJI_API_KEY, uid },
-          responseType: 'arraybuffer',
-          /* timeout: 600000 */ // Désactivé
+        const fluxResponse = await axios.get(KAIZ_API_URL, {
+          params: { prompt, ratio: '3:4', stream: true, apikey: 'd1dc9369-0d12-4731-ada2-dd88f398382a' },
+          responseType: 'arraybuffer'
         });
         const base64Data = Buffer.from(fluxResponse.data, 'binary').toString('base64');
         const form = new FormData();
