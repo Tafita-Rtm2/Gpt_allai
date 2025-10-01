@@ -10,13 +10,6 @@ const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const cluster = require('cluster');
 const os = require('os');
-const fs = require('fs');
-const path = require('path');
-const multer = require('multer');
-const pdf = require('pdf-parse');
-const mammoth = require('mammoth');
-const PDFDocument = require('pdfkit');
-const { Document, Packer, Paragraph } = require('docx');
 
 const numCPUs = os.cpus().length;
 
@@ -38,15 +31,6 @@ if (cluster.isPrimary) {
     app.use(express.json({ limit: '50mb' }));
     app.use(cors());
     app.use(express.static('public'));
-
-    // Ensure necessary directories exist
-    const uploadsDir = path.join(__dirname, 'uploads');
-    const downloadsDir = path.join(__dirname, 'public', 'downloads');
-    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-    if (!fs.existsSync(downloadsDir)) fs.mkdirSync(downloadsDir, { recursive: true });
-
-    // Multer setup for file uploads
-    const upload = multer({ dest: 'uploads/' });
 
     const apiKeyCache = new Map();
     const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
@@ -454,46 +438,6 @@ if (cluster.isPrimary) {
 
     app.use('/v1', authenticateApiKey);
 
-    // Endpoint for file upload and text extraction
-    app.post('/v1/upload', upload.single('file'), async (req, res) => {
-        if (!req.file) {
-            return res.status(400).json({ error: 'No file uploaded.' });
-        }
-
-        const { path: filePath, mimetype, originalname } = req.file;
-        const fileId = crypto.randomBytes(16).toString('hex');
-        let text = '';
-
-        try {
-            if (mimetype === 'application/pdf') {
-                const dataBuffer = fs.readFileSync(filePath);
-                const data = await pdf(dataBuffer);
-                text = data.text;
-            } else if (mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-                const result = await mammoth.extractRawText({ path: filePath });
-                text = result.value;
-            } else if (mimetype.startsWith('text/')) {
-                text = fs.readFileSync(filePath, 'utf8');
-            } else {
-                fs.unlinkSync(filePath); // Clean up unsupported file
-                return res.status(400).json({ error: `Unsupported file type: ${mimetype}` });
-            }
-
-            await db.query('INSERT INTO uploaded_files (file_id, content) VALUES ($1, $2)', [fileId, text]);
-            fs.unlinkSync(filePath); // Clean up the file after processing
-
-            console.log(`Successfully processed and stored file ${originalname} with ID: ${fileId}`);
-            res.json({ message: 'File processed successfully.', fileId: fileId });
-
-        } catch (error) {
-            console.error('Error processing file:', error);
-            if (fs.existsSync(filePath)) {
-                fs.unlinkSync(filePath); // Ensure cleanup on error
-            }
-            res.status(500).json({ error: 'Failed to process file.' });
-        }
-    });
-
     app.get('/api/puter-families', (req, res) => {
         const families = [...new Set(puterModels.map(model => model.split('/')[0]))];
         res.json(families.sort());
@@ -626,7 +570,7 @@ if (cluster.isPrimary) {
 
     app.post('/v1/chat/completions', async (req, res) => {
       const { userId } = req.authInfo;
-      const { model, messages, stream, max_tokens, google_api_key, fileId } = req.body;
+      const { model, messages, stream, max_tokens, google_api_key } = req.body;
 
       if (!messages || messages.length === 0) {
         return res.status(400).json({ error: 'Invalid messages array.' });
@@ -650,23 +594,6 @@ if (cluster.isPrimary) {
             imageUrl = imagePart.image_url.url;
           }
         }
-
-        if (fileId) {
-            try {
-                const fileResult = await db.query('SELECT content FROM uploaded_files WHERE file_id = $1', [fileId]);
-                if (fileResult.rows.length > 0) {
-                    const fileText = fileResult.rows[0].content;
-                    const fileContext = `Here is the content of the document you need to use:\n\n"""\n${fileText}\n"""\n\nPlease use this document to answer the following question:`;
-                    ask = `${fileContext}\n\n${ask}`;
-                } else {
-                    return res.status(404).json({ error: 'File ID not found. The file may not have been uploaded or has expired.' });
-                }
-            } catch (dbError) {
-                console.error('Database error fetching file content:', dbError);
-                return res.status(500).json({ error: 'Failed to retrieve file content from database.' });
-            }
-        }
-
         const uid = userId;
         if (gpt5Models.includes(model)) {
             const lowerCaseAsk = ask.toLowerCase().trim();
