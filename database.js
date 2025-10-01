@@ -45,6 +45,28 @@ const initializeDatabase = async () => {
         await pool.query(`DROP TABLE IF EXISTS chat_history;`);
         console.log('Chat history table removed if it existed.');
 
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS uploaded_files (
+                id SERIAL PRIMARY KEY,
+                file_id TEXT UNIQUE NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('Uploaded files table is ready.');
+
+        // Periodically clean up files older than 1 hour
+        setInterval(async () => {
+            try {
+                const result = await pool.query("DELETE FROM uploaded_files WHERE created_at < NOW() - INTERVAL '1 hour'");
+                if (result.rowCount > 0) {
+                    console.log(`Cleaned up ${result.rowCount} old file(s).`);
+                }
+            } catch (err) {
+                console.error('Error cleaning up old files:', err);
+            }
+        }, 60 * 60 * 1000); // Run every hour
+
     } catch (err) {
         console.error('Error initializing database:', err.stack);
     }
