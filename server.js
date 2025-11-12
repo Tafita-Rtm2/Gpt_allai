@@ -485,7 +485,7 @@ app.get('/v1/models', async (req, res) => {
                 try {
                     const response = await axios.get(HAJI_ANTHROPIC_URL, {
                         params: { ask: 'hello', model: 'claude-3-opus-20240229', api_key: backendKey, uid: req.authInfo.userId },
-                        timeout: 600000,
+                        timeout: 0,
                     });
                     if (response.data && Array.isArray(response.data.supported_models)) {
                         modelsList = response.data.supported_models;
@@ -503,7 +503,7 @@ app.get('/v1/models', async (req, res) => {
                 try {
                      const response = await axios.get(HAJI_GEMINI_URL, {
                         params: { ask: 'hello', model: 'gemini-1.5-pro-latest', api_key: backendKey, uid: req.authInfo.userId },
-                        timeout: 600000,
+                        timeout: 0,
                     });
                     if (response.data && Array.isArray(response.data.supported_models)) {
                         modelsList = response.data.supported_models;
@@ -521,7 +521,7 @@ app.get('/v1/models', async (req, res) => {
                  try {
                      const response = await axios.get(HAJI_OPENAI_URL, {
                         params: { ask: 'hello', model: 'gpt-4', api_key: backendKey, uid: req.authInfo.userId },
-                        timeout: 600000,
+                        timeout: 0,
                     });
                     if (response.data && Array.isArray(response.data.supported_models)) {
                         modelsList = response.data.supported_models;
@@ -596,55 +596,6 @@ app.post('/v1/chat/completions', async (req, res) => {
     }
     const uid = userId;
 
-    const longResponseKeywords = [
-        'long response', 'long story', 'long article', 'in detail', 'detailed explanation', '6000 words'
-    ];
-    const isLongResponseRequest = longResponseKeywords.some(keyword => ask.toLowerCase().includes(keyword));
-    const isClaudeModel = model.toLowerCase().includes('claude');
-
-    if (isClaudeModel && isLongResponseRequest) {
-        let fullAnswer = '';
-        let currentAsk = ask;
-        const maxIterations = 5;
-
-        for (let i = 0; i < maxIterations; i++) {
-            const apiParams = { ask: currentAsk, model, api_key: HAJI_API_KEY, uid };
-            const response = await axios.get(HAJI_ANTHROPIC_URL, { params: apiParams, timeout: 600000 });
-            const apiResponse = response.data;
-
-            if (!apiResponse || !apiResponse.answer) {
-                throw new Error('Received an invalid response from the external API.');
-            }
-
-            fullAnswer += apiResponse.answer;
-            currentAsk = 'continue';
-        }
-
-        const finalApiParams = { ask: 'continue', model, api_key: HAJI_API_KEY, uid };
-        const finalResponse = await axios.get(HAJI_ANTHROPIC_URL, { params: finalApiParams, timeout: 600000 });
-        const finalApiResponse = finalResponse.data;
-        if (finalApiResponse && finalApiResponse.answer) {
-            fullAnswer += finalApiResponse.answer;
-        }
-
-        const modelUsed = finalApiResponse.model_used || model;
-        const completionId = `chatcmpl-${Date.now()}`;
-
-        if (stream) {
-            res.setHeader('Content-Type', 'text/event-stream');
-            const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
-            res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
-            const contentChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { content: fullAnswer }, finish_reason: null }] };
-            res.write(`data: ${JSON.stringify(contentChunk)}\n\n`);
-            const stopChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
-            res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
-            res.write('data: [DONE]\n\n');
-            res.end();
-        } else {
-            res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: fullAnswer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
-        }
-        return;
-    }
 
     if (gpt5Models.includes(model)) {
         const lowerCaseAsk = ask.toLowerCase().trim();
@@ -652,11 +603,11 @@ app.post('/v1/chat/completions', async (req, res) => {
 
         if (triggerKeyword && !imageUrl) {
             const prompt = ask.substring(triggerKeyword.length).trim();
-            const imageResponse = await axios.get(HAJI_FLUXWEBUI_URL, { params: { prompt, width: 1024, height: 1820, seed: 1757183203232, nologo: true, nofeed: true, api_key: HAJI_PUTER_API_KEY }, responseType: 'arraybuffer', timeout: 600000 });
+            const imageResponse = await axios.get(HAJI_FLUXWEBUI_URL, { params: { prompt, width: 1024, height: 1820, seed: 1757183203232, nologo: true, nofeed: true, api_key: HAJI_PUTER_API_KEY }, responseType: 'arraybuffer', timeout: 0 });
             const base64Data = Buffer.from(imageResponse.data, 'binary').toString('base64');
             const form = new FormData();
             form.append('image', base64Data);
-            const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders(), timeout: 600000 });
+            const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders(), timeout: 0 });
             if (!imgbbResponse.data || !imgbbResponse.data.success) { throw new Error('Failed to upload generated image to ImgBB.'); }
             const generatedImageUrl = imgbbResponse.data.data.url;
             const responseContent = `![Generated Image](${generatedImageUrl})`;
@@ -671,11 +622,11 @@ app.post('/v1/chat/completions', async (req, res) => {
         const apiParams = { ask: ask, model: fullModelName, api_key: HAJI_PUTER_API_KEY, uid, roleplay, stream: !!stream };
 
         if (stream) {
-            const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, responseType: 'stream', timeout: 600000 });
+            const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, responseType: 'stream', timeout: 0 });
             res.setHeader('Content-Type', 'text/event-stream');
             response.data.pipe(res);
         } else {
-            const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 600000 });
+            const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 0 });
             const apiResponse = response.data;
             if (!apiResponse || !apiResponse.answer) { throw new Error('Received an invalid response from the external Puter API for a GPT-5 model.'); }
             const modelUsed = apiResponse.model_used || model;
@@ -691,16 +642,16 @@ app.post('/v1/chat/completions', async (req, res) => {
       const prompt = ask.substring(triggerKeyword.length).trim();
       let imageResponse;
       if (openAIModels.includes(model)) {
-        imageResponse = await axios.get(HAJI_IMAGEN_URL, { params: { prompt: prompt, model: 'dall-e-3', api_key: HAJI_OPENAI_API_KEY, }, responseType: 'arraybuffer', timeout: 600000 });
+        imageResponse = await axios.get(HAJI_IMAGEN_URL, { params: { prompt: prompt, model: 'dall-e-3', api_key: HAJI_OPENAI_API_KEY, }, responseType: 'arraybuffer', timeout: 0 });
       } else if (geminiModels.includes(model)) {
-        imageResponse = await axios.get(HAJI_POLLINATION_URL, { params: { prompt, width: 1024, height: 1820, seed: 1757183203234, model: 'flux', nologo: true, enhance: false, api_key: HAJI_GEMINI_API_KEY }, responseType: 'arraybuffer', timeout: 600000 });
+        imageResponse = await axios.get(HAJI_POLLINATION_URL, { params: { prompt, width: 1024, height: 1820, seed: 1757183203234, model: 'flux', nologo: true, enhance: false, api_key: HAJI_GEMINI_API_KEY }, responseType: 'arraybuffer', timeout: 0 });
       } else {
-        imageResponse = await axios.get(HAJI_FLUX_URL, { params: { prompt, api_key: HAJI_API_KEY, uid }, responseType: 'arraybuffer', timeout: 600000 });
+        imageResponse = await axios.get(HAJI_FLUX_URL, { params: { prompt, api_key: HAJI_API_KEY, uid }, responseType: 'arraybuffer', timeout: 0 });
       }
       const base64Data = Buffer.from(imageResponse.data, 'binary').toString('base64');
       const form = new FormData();
       form.append('image', base64Data);
-      const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders(), timeout: 600000 });
+      const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders(), timeout: 0 });
       if (!imgbbResponse.data || !imgbbResponse.data.success) { throw new Error('Failed to upload generated image to ImgBB.'); }
       const generatedImageUrl = imgbbResponse.data.data.url;
       const responseContent = `![Generated Image](${generatedImageUrl})`;
@@ -726,7 +677,7 @@ app.post('/v1/chat/completions', async (req, res) => {
                 const base64Data = imageUrl.replace(/^data:image\/[a-z]+;base64,/, "");
                 const form = new FormData();
                 form.append('image', base64Data);
-                const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders(), timeout: 600000 });
+                const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders(), timeout: 0 });
                 if (imgbbResponse.data && imgbbResponse.data.success) { finalImageUrl = imgbbResponse.data.data.url; } else { throw new Error('Failed to upload image to ImgBB.'); }
             } else {
                 finalImageUrl = imageUrl;
@@ -734,7 +685,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         }
         const apiParams = { ask: ask, model: model, api_key: HAJI_GEMINI_API_KEY, uid, roleplay, max_tokens: max_tokens || '', google_api_key: google_api_key || '', };
         if (finalImageUrl) apiParams.file_url = finalImageUrl;
-        const response = await axios.get(HAJI_GEMINI_URL, { params: apiParams, timeout: 600000 });
+        const response = await axios.get(HAJI_GEMINI_URL, { params: apiParams, timeout: 0 });
         const apiResponse = response.data;
         if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from Gemini API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external Gemini API.'); }
         const modelUsed = apiResponse.model_used || model;
@@ -756,7 +707,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         return;
     } else if (puterModels.includes(model)) {
         const apiParams = { ask: ask, model: model, api_key: HAJI_PUTER_API_KEY, uid, roleplay, stream: false, };
-        const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 600000 });
+        const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 0 });
         const apiResponse = response.data;
         if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from Puter API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external Puter API.'); }
         const modelUsed = apiResponse.model_used || model;
@@ -777,7 +728,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         }
         return;
     } else if (rtmModels.includes(model)) {
-        const response = await axios.get(`${HAJI_RTM_URL}/${encodeURIComponent(ask)}?model=${model}`, { timeout: 600000 });
+        const response = await axios.get(`${HAJI_RTM_URL}/${encodeURIComponent(ask)}?model=${model}`, { timeout: 0 });
         const answer = response.data;
         const completionId = `chatcmpl-${Date.now()}`;
         res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
@@ -789,7 +740,7 @@ app.post('/v1/chat/completions', async (req, res) => {
                 const base64Data = imageUrl.replace(/^data:image\/[a-z]+;base64,/, "");
                 const form = new FormData();
                 form.append('image', base64Data);
-                const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders(), timeout: 600000 });
+                const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders(), timeout: 0 });
                 if (imgbbResponse.data && imgbbResponse.data.success) { finalImageUrl = imgbbResponse.data.data.url; } else { throw new Error('Failed to upload image to ImgBB.'); }
             } else {
                 finalImageUrl = imageUrl;
@@ -797,7 +748,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         }
         const apiParams = { ask: ask, model: model, api_key: HAJI_OPENAI_API_KEY, uid, roleplay, max_tokens: max_tokens || '', };
         if (finalImageUrl) apiParams.img_url = finalImageUrl;
-        const response = await axios.get(HAJI_OPENAI_URL, { params: apiParams, timeout: 600000 });
+        const response = await axios.get(HAJI_OPENAI_URL, { params: apiParams, timeout: 0 });
         const apiResponse = response.data;
         if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from OpenAI API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external OpenAI API.'); }
         const modelUsed = apiResponse.model_used || model;
@@ -818,13 +769,14 @@ app.post('/v1/chat/completions', async (req, res) => {
         }
         return;
     }
+    // Default handler for Claude models
     let finalImageUrl = null;
     if (imageUrl) {
       if (imageUrl.startsWith('data:image')) {
         const base64Data = imageUrl.replace(/^data:image\/[a-z]+;base64,/, "");
         const form = new FormData();
         form.append('image', base64Data);
-        const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders(), timeout: 600000 });
+        const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders(), timeout: 0 });
         if (imgbbResponse.data && imgbbResponse.data.success) {
           finalImageUrl = imgbbResponse.data.data.url;
         } else {
@@ -834,26 +786,52 @@ app.post('/v1/chat/completions', async (req, res) => {
         finalImageUrl = imageUrl;
       }
     }
-    const apiParams = { ask, model, api_key: HAJI_API_KEY, uid };
-    if (finalImageUrl) apiParams.img_url = finalImageUrl;
-    const response = await axios.get(HAJI_ANTHROPIC_URL, { params: apiParams, timeout: 600000 });
-    const apiResponse = response.data;
-    if (!apiResponse || !apiResponse.answer) { throw new Error('Received an invalid response from the external API.'); }
-    const modelUsed = apiResponse.model_used || model;
-    const answer = apiResponse.answer;
+
+    const initialApiParams = { ask, model, api_key: HAJI_API_KEY, uid };
+    if (finalImageUrl) initialApiParams.img_url = finalImageUrl;
+
+    const initialResponse = await axios.get(HAJI_ANTHROPIC_URL, { params: initialApiParams, timeout: 0 });
+    const initialApiResponse = initialResponse.data;
+    if (!initialApiResponse || !initialApiResponse.answer) {
+        throw new Error('Received an invalid response from the external API.');
+    }
+
+    let fullAnswer = initialApiResponse.answer;
+    const modelUsed = initialApiResponse.model_used || model;
+
+    const wordCount = fullAnswer.split(/\s+/).length;
+    const isClaudeModelForLoop = ['claude-opus', 'claude-haiku-4-5-20251001', 'claude-3-opus-20240229'].some(m => model.toLowerCase().includes(m));
+
+    if (isClaudeModelForLoop && wordCount > 400) {
+        let currentAsk = 'continue';
+        const maxIterations = 5;
+
+        for (let i = 0; i < maxIterations; i++) {
+            const loopApiParams = { ask: currentAsk, model, api_key: HAJI_API_KEY, uid };
+            const loopResponse = await axios.get(HAJI_ANTHROPIC_URL, { params: loopApiParams, timeout: 0 });
+            const loopApiResponse = loopResponse.data;
+
+            if (loopApiResponse && loopApiResponse.answer) {
+                fullAnswer += loopApiResponse.answer;
+            } else {
+                break;
+            }
+        }
+    }
+
     const completionId = `chatcmpl-${Date.now()}`;
     if (stream) {
       res.setHeader('Content-Type', 'text/event-stream');
       const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
       res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
-      const contentChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { content: answer }, finish_reason: null }] };
+      const contentChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { content: fullAnswer }, finish_reason: null }] };
       res.write(`data: ${JSON.stringify(contentChunk)}\n\n`);
       const stopChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
       res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
       res.write('data: [DONE]\n\n');
       res.end();
     } else {
-      res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
+      res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: fullAnswer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
     }
   } catch (error) {
     console.error('Error during chat completion:', error.message);
@@ -874,12 +852,12 @@ app.post('/v1/images/generations', async (req, res) => {
     const fluxResponse = await axios.get(HAJI_FLUX_URL, {
       params: { prompt, api_key: HAJI_API_KEY, uid },
       responseType: 'arraybuffer',
-      timeout: 600000
+      timeout: 0
     });
     const base64Data = Buffer.from(fluxResponse.data, 'binary').toString('base64');
     const form = new FormData();
     form.append('image', base64Data);
-    const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders(), timeout: 600000 });
+    const imgbbResponse = await axios.post(`${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`, form, { headers: form.getHeaders(), timeout: 0 });
     if (!imgbbResponse.data || !imgbbResponse.data.success) {
       throw new Error('Failed to upload generated image to ImgBB.');
     }
