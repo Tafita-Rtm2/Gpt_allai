@@ -595,6 +595,57 @@ app.post('/v1/chat/completions', async (req, res) => {
       }
     }
     const uid = userId;
+
+    const longResponseKeywords = [
+        'long response', 'long story', 'long article', 'in detail', 'detailed explanation', '6000 words'
+    ];
+    const isLongResponseRequest = longResponseKeywords.some(keyword => ask.toLowerCase().includes(keyword));
+    const isClaudeModel = model.toLowerCase().includes('claude');
+
+    if (isClaudeModel && isLongResponseRequest) {
+        let fullAnswer = '';
+        let currentAsk = ask;
+        const maxIterations = 5;
+
+        for (let i = 0; i < maxIterations; i++) {
+            const apiParams = { ask: currentAsk, model, api_key: HAJI_API_KEY, uid };
+            const response = await axios.get(HAJI_ANTHROPIC_URL, { params: apiParams, timeout: 600000 });
+            const apiResponse = response.data;
+
+            if (!apiResponse || !apiResponse.answer) {
+                throw new Error('Received an invalid response from the external API.');
+            }
+
+            fullAnswer += apiResponse.answer;
+            currentAsk = 'continue';
+        }
+
+        const finalApiParams = { ask: 'continue', model, api_key: HAJI_API_KEY, uid };
+        const finalResponse = await axios.get(HAJI_ANTHROPIC_URL, { params: finalApiParams, timeout: 600000 });
+        const finalApiResponse = finalResponse.data;
+        if (finalApiResponse && finalApiResponse.answer) {
+            fullAnswer += finalApiResponse.answer;
+        }
+
+        const modelUsed = finalApiResponse.model_used || model;
+        const completionId = `chatcmpl-${Date.now()}`;
+
+        if (stream) {
+            res.setHeader('Content-Type', 'text/event-stream');
+            const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
+            res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
+            const contentChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { content: fullAnswer }, finish_reason: null }] };
+            res.write(`data: ${JSON.stringify(contentChunk)}\n\n`);
+            const stopChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
+            res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+        } else {
+            res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: fullAnswer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
+        }
+        return;
+    }
+
     if (gpt5Models.includes(model)) {
         const lowerCaseAsk = ask.toLowerCase().trim();
         const triggerKeyword = imageGenerationKeywords.find(keyword => lowerCaseAsk === keyword || lowerCaseAsk.startsWith(keyword + ' '));
