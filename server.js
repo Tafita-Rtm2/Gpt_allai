@@ -790,7 +790,7 @@ app.post('/v1/chat/completions', async (req, res) => {
     const initialApiParams = { ask, model, api_key: HAJI_API_KEY, uid };
     if (finalImageUrl) initialApiParams.img_url = finalImageUrl;
 
-    const initialResponse = await axios.get(HAJI_ANTHROPIC_URL, { params: initialApiParams, timeout: 600000 });
+    const initialResponse = await axios.get(HAJI_ANTHROPIC_URL, { params: initialApiParams, timeout: 0 });
     const initialApiResponse = initialResponse.data;
     if (!initialApiResponse || !initialApiResponse.answer) {
         throw new Error('Received an invalid response from the external API.');
@@ -800,20 +800,28 @@ app.post('/v1/chat/completions', async (req, res) => {
     const modelUsed = initialApiResponse.model_used || model;
     
     const wordCount = fullAnswer.split(/\s+/).length;
-    const isClaudeModelForLoop = ['claude-opus', 'claude-haiku-4-5-20251001', 'claude-3-opus-20240229'].some(m => model.toLowerCase().includes(m));
 
-    if (isClaudeModelForLoop && wordCount > 400) {
-        let currentAsk = 'continue';
-        const maxIterations = 5;
+    if (wordCount > 200) {
+        const prompts = [
+            "continue",
+            "continue",
+            "continue et comence a conclure car je vais te demande une derniere foix apres pour bien conclure totalement",
+            "conclure et finire"
+        ];
 
-        for (let i = 0; i < maxIterations; i++) {
-            const loopApiParams = { ask: currentAsk, model, api_key: HAJI_API_KEY, uid };
-            const loopResponse = await axios.get(HAJI_ANTHROPIC_URL, { params: loopApiParams, timeout: 600000 });
-            const loopApiResponse = loopResponse.data;
+        for (const prompt of prompts) {
+            const loopApiParams = { ask: prompt, model, api_key: HAJI_API_KEY, uid };
+            try {
+                const loopResponse = await axios.get(HAJI_ANTHROPIC_URL, { params: loopApiParams, timeout: 0 });
+                const loopApiResponse = loopResponse.data;
 
-            if (loopApiResponse && loopApiResponse.answer) {
-                fullAnswer += loopApiResponse.answer;
-            } else {
+                if (loopApiResponse && loopApiResponse.answer) {
+                    fullAnswer += "\n\n" + loopApiResponse.answer;
+                } else {
+                    break; 
+                }
+            } catch (error) {
+                console.error(`Error during loop for prompt "${prompt}":`, error.message);
                 break;
             }
         }
