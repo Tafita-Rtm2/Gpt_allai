@@ -518,7 +518,7 @@ app.get('/v1/models', async (req, res) => {
                 try {
                     const response = await axios.get(HAJI_ANTHROPIC_URL, {
                         params: { ask: 'hello', model: 'claude-3-opus-20240229', api_key: backendKey, uid: req.authInfo.userId },
-                        timeout: 600000,
+                        timeout: 9999999999,
                     });
                     if (response.data && Array.isArray(response.data.supported_models)) {
                         modelsList = response.data.supported_models;
@@ -536,7 +536,7 @@ app.get('/v1/models', async (req, res) => {
                 try {
                      const response = await axios.get(HAJI_GEMINI_URL, {
                         params: { ask: 'hello', model: 'gemini-1.5-pro-latest', api_key: backendKey, uid: req.authInfo.userId },
-                        timeout: 600000,
+                        timeout: 9999999999,
                     });
                     if (response.data && Array.isArray(response.data.supported_models)) {
                         modelsList = response.data.supported_models;
