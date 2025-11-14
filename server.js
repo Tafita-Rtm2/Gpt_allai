@@ -110,6 +110,7 @@ const IMGBB_API_KEY = process.env.IMGBB_API_KEY;
 
 const backendKeys = {
     claude: HAJI_API_KEY,
+    claude_v2: HAJI_API_KEY,
     gemini: HAJI_GEMINI_API_KEY,
     puter: HAJI_PUTER_API_KEY,
     openai: HAJI_OPENAI_API_KEY,
@@ -118,6 +119,7 @@ const backendKeys = {
 
 // API URLs from .env
 const HAJI_ANTHROPIC_URL = process.env.HAJI_ANTHROPIC_URL;
+const HAJI_ANTHROPIC_V2_URL = process.env.HAJI_ANTHROPIC_V2_URL;
 const HAJI_FLUX_URL = process.env.HAJI_FLUX_URL;
 const HAJI_GPTOSS_URL = process.env.HAJI_GPTOSS_URL;
 const HAJI_GEMINI_URL = process.env.HAJI_GEMINI_URL;
@@ -298,6 +300,17 @@ const puterModels = [
     "meta-llama/llama-2-13b-chat", "meta-llama/llama-2-70b-chat", "openai/gpt-3.5-turbo-0125", "openai/gpt-4-0314",
     "openai/gpt-4", "openai/gpt-3.5-turbo-0301", "openai/gpt-3.5-turbo"
 ];
+const claudeV2Models = [
+    "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-5-20250929",
+    "claude-opus-4-1-20250805",
+    "claude-opus-4-20250514",
+    "claude-sonnet-4-20250514",
+    "claude-3-7-sonnet-20250219",
+    "claude-3-5-haiku-20241022",
+    "claude-3-haiku-20240307",
+    "claude-3-opus-20240229"
+];
 
 let rtmModels = [];
 
@@ -400,6 +413,9 @@ app.post('/api/generate-key', authenticateWebSession, async (req, res) => {
         case 'claude':
             backendKey = backendKeys.claude;
             break;
+        case 'claude_v2':
+            backendKey = backendKeys.claude_v2;
+            break;
         case 'gemini':
             backendKey = backendKeys.gemini;
             break;
@@ -481,6 +497,23 @@ app.get('/v1/models', async (req, res) => {
         let owner = filter;
 
         switch (providerContext) {
+            case 'claude_v2':
+                try {
+                    const response = await axios.get(HAJI_ANTHROPIC_V2_URL, {
+                        params: { q: 'hello', model: 'claude-opus-4-20250514', uid: req.authInfo.userId, max_tokens: 32000 },
+                        timeout: 600000,
+                    });
+                    if (response.data && Array.isArray(response.data.models)) {
+                        modelsList = response.data.models;
+                    } else {
+                        throw new Error('Could not retrieve supported models from Claude v2 API.');
+                    }
+                } catch (e) {
+                    console.error("Failed to fetch dynamic models for Claude v2, falling back to hardcoded list.", e.message);
+                    modelsList = claudeV2Models;
+                }
+                owner = 'anthropic';
+                break;
             case 'claude':
                 try {
                     const response = await axios.get(HAJI_ANTHROPIC_URL, {
@@ -681,7 +714,7 @@ app.post('/v1/chat/completions', async (req, res) => {
                 finalImageUrl = imageUrl;
             }
         }
-        const apiParams = { ask: ask, model: model, api_key: HAJI_GEMINI_API_KEY, uid, roleplay, max_tokens: max_tokens || '', google_api_key: google_api_key || '', };
+        const apiParams = { ask: ask, model: model, api_key: HAJI_GEMINI_API_KEY, uid, roleplay, max_tokens: max_tokens || '', google_api_key: google_api_key || ''};
         if (finalImageUrl) apiParams.file_url = finalImageUrl;
         const response = await axios.get(HAJI_GEMINI_URL, { params: apiParams, timeout: 600000 });
         const apiResponse = response.data;
@@ -704,7 +737,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         }
         return;
     } else if (puterModels.includes(model)) {
-        const apiParams = { ask: ask, model: model, api_key: HAJI_PUTER_API_KEY, uid, roleplay, stream: false, };
+        const apiParams = { ask: ask, model: model, api_key: HAJI_PUTER_API_KEY, uid, roleplay, stream: false };
         const response = await axios.get(HAJI_PUTER_URL, { params: apiParams, timeout: 600000 });
         const apiResponse = response.data;
         if (!apiResponse || !apiResponse.answer) { console.error('Invalid response from Puter API. Full response:', JSON.stringify(apiResponse, null, 2)); throw new Error('Received an invalid response from the external Puter API.'); }
@@ -730,6 +763,36 @@ app.post('/v1/chat/completions', async (req, res) => {
         const answer = response.data;
         const completionId = `chatcmpl-${Date.now()}`;
         res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: model, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
+        return;
+    } else if (claudeV2Models.includes(model)) {
+        const apiParams = { q: ask, model: model, uid, max_tokens: max_tokens || 32000 };
+        if (imageUrl) apiParams.image = imageUrl;
+
+        const response = await axios.get(HAJI_ANTHROPIC_V2_URL, { params: apiParams, timeout: 600000 });
+        const apiResponse = response.data;
+
+        if (!apiResponse || !apiResponse.response) {
+            console.error('Invalid response from Claude v2 API. Full response:', JSON.stringify(apiResponse, null, 2));
+            throw new Error('Received an invalid response from the external Claude v2 API.');
+        }
+
+        const modelUsed = apiResponse.model || model;
+        const answer = apiResponse.response;
+        const completionId = `chatcmpl-${Date.now()}`;
+
+        if (stream) {
+            res.setHeader('Content-Type', 'text/event-stream');
+            const roleChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] };
+            res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
+            const contentChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: { content: answer }, finish_reason: null }] };
+            res.write(`data: ${JSON.stringify(contentChunk)}\n\n`);
+            const stopChunk = { id: completionId, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
+            res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+        } else {
+            res.json({ id: completionId, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: modelUsed, choices: [{ index: 0, message: { role: 'assistant', content: answer }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } });
+        }
         return;
     } else if (openAIModels.includes(model)) {
         let finalImageUrl = null;
