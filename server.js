@@ -405,6 +405,10 @@ const authenticateWebSession = async (req, res, next) => {
     }
 };
 
+app.get('/api/me', authenticateWebSession, (req, res) => {
+    res.json({ email: req.user.email });
+});
+
 app.post('/api/generate-key', authenticateWebSession, async (req, res) => {
     const { provider, sub_provider } = req.body;
     let backendKey;
