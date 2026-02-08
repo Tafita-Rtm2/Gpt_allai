@@ -14,17 +14,84 @@ document.addEventListener('DOMContentLoaded', () => {
     const apiKeyCode = document.getElementById('api-key-code');
     const copyKeyButton = document.getElementById('copy-key-button');
     const apiKeyHistoryContainer = document.getElementById('api-key-history-container');
+    const baseUrlDisplay = document.getElementById('base-url-display');
+    const baseUrlPlaceholders = document.querySelectorAll('.base-url-placeholder');
 
-    // Elements for Puter provider filter (optional)
+    // Navigation
+    const navItems = document.querySelectorAll('.nav-item');
+    const sections = document.querySelectorAll('.content-section');
+
+    // Documentation
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabPanes = document.querySelectorAll('.tab-pane');
+    const copyCodeBtns = document.querySelectorAll('.copy-code-btn');
+
+    // Playground
+    const playgroundKeySelect = document.getElementById('playground-key-select');
+    const playgroundModelSelect = document.getElementById('playground-model-select');
+    const chatInput = document.getElementById('chat-input');
+    const sendRequestBtn = document.getElementById('send-test-request');
+    const chatOutput = document.getElementById('chat-output');
+
+    // Puter filter
     const puterFilterSection = document.getElementById('puter-filter-section');
-    const puterSearch = document.getElementById('puter-search');
     const puterFamiliesList = document.getElementById('puter-families-list');
     let allPuterFamilies = [];
 
-    // --- Initial Setup ---
+    // --- Setup ---
+    const currentBaseUrl = `${window.location.origin}/v1`;
+    if (baseUrlDisplay) baseUrlDisplay.textContent = currentBaseUrl;
+    baseUrlPlaceholders.forEach(p => p.textContent = currentBaseUrl);
+
+    // Get user info
+    fetchUserInfo();
+
     fetchAndDisplayApiKeys();
 
-    // --- Event Listeners ---
+    // --- Navigation Logic ---
+    navItems.forEach(item => {
+        item.addEventListener('click', () => {
+            const sectionId = item.getAttribute('data-section');
+
+            // Update active nav item
+            navItems.forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+
+            // Show corresponding section
+            sections.forEach(s => {
+                s.classList.remove('active');
+                if (s.id === sectionId) s.classList.add('active');
+            });
+        });
+    });
+
+    // --- Documentation Tab Logic ---
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tabId = btn.getAttribute('data-tab');
+
+            tabBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            tabPanes.forEach(p => {
+                p.classList.remove('active');
+                if (p.id === tabId) p.classList.add('active');
+            });
+        });
+    });
+
+    copyCodeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const code = btn.previousElementSibling.innerText;
+            navigator.clipboard.writeText(code).then(() => {
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<i class="bi bi-check"></i> Copied!';
+                setTimeout(() => { btn.innerHTML = originalText; }, 2000);
+            });
+        });
+    });
+
+    // --- API Key Generation ---
     logoutButton.addEventListener('click', () => {
         localStorage.removeItem('authToken');
         window.location.href = '/index.html';
@@ -39,21 +106,20 @@ document.addEventListener('DOMContentLoaded', () => {
             let logoUrl = '';
             switch (selectedProvider) {
                 case 'claude':
-                    logoUrl = 'assets/claude.jpg';
+                    logoUrl = 'assets/claude.svg';
                     break;
                 case 'gemini':
-                    logoUrl = 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/icons/gear.svg';
+                    logoUrl = 'assets/gemini.svg';
                     break;
                 case 'openai':
                 case 'chatgpt5':
                     logoUrl = 'assets/openai.svg';
                     break;
-                case 'puter':
-                    logoUrl = 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/icons/gear.svg';
-                    break;
                 case 'rtm':
-                    logoUrl = 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/icons/gear.svg';
+                    logoUrl = 'assets/rtmlogo.jpg';
                     break;
+                default:
+                    logoUrl = 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/icons/gear.svg';
             }
             providerLogo.src = logoUrl;
             providerLogo.classList.remove('hidden');
@@ -102,7 +168,6 @@ document.addEventListener('DOMContentLoaded', () => {
             apiKeyCode.textContent = data.apiKey;
             apiKeyDisplay.classList.remove('hidden');
 
-            // Refresh the API key list
             fetchAndDisplayApiKeys();
 
         } catch (error) {
@@ -115,12 +180,67 @@ document.addEventListener('DOMContentLoaded', () => {
 
     copyKeyButton.addEventListener('click', () => {
         navigator.clipboard.writeText(apiKeyCode.textContent).then(() => {
-            copyKeyButton.textContent = 'Copied!';
-            setTimeout(() => { copyKeyButton.textContent = 'Copy'; }, 2000);
+            const originalIcon = copyKeyButton.innerHTML;
+            copyKeyButton.innerHTML = '<i class="bi bi-check-lg"></i>';
+            setTimeout(() => { copyKeyButton.innerHTML = originalIcon; }, 2000);
         });
     });
 
-    // --- Functions ---
+    // --- Playground Logic ---
+    sendRequestBtn.addEventListener('click', async () => {
+        const apiKey = playgroundKeySelect.value;
+        const model = playgroundModelSelect.value;
+        const message = chatInput.value.trim();
+
+        if (!apiKey) return alert('Please select an API key.');
+        if (!message) return alert('Please enter a message.');
+
+        // Add user message to chat
+        appendMessage('user', message);
+        chatInput.value = '';
+        sendRequestBtn.disabled = true;
+
+        const loadingMsg = appendMessage('assistant', 'Thinking...');
+
+        try {
+            const response = await fetch(`${currentBaseUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: model,
+                    messages: [{ role: 'user', content: message }]
+                })
+            });
+
+            const data = await response.json();
+            loadingMsg.remove();
+
+            if (!response.ok) throw new Error(data.error || 'API Request failed.');
+
+            const content = data.choices[0].message.content;
+            appendMessage('assistant', content);
+
+        } catch (error) {
+            loadingMsg.remove();
+            appendMessage('system', `Error: ${error.message}`);
+        } finally {
+            sendRequestBtn.disabled = false;
+        }
+    });
+
+    function appendMessage(role, content) {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `message ${role}`;
+        msgDiv.textContent = content;
+        chatOutput.appendChild(msgDiv);
+        chatOutput.scrollTop = chatOutput.scrollHeight;
+        return msgDiv;
+    }
+
+    // --- Helper Functions ---
     async function fetchAndDisplayPuterFamilies() {
         try {
             puterFamiliesList.innerHTML = '<p>Loading...</p>';
@@ -135,38 +255,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderPuterFamilies(families) {
         puterFamiliesList.innerHTML = '';
-        const allLabel = document.createElement('label');
-        const allRadio = document.createElement('input');
-        allRadio.type = 'radio';
-        allRadio.name = 'puter-family';
-        allRadio.value = '';
-        allRadio.checked = true;
-        allLabel.appendChild(allRadio);
-        allLabel.append(' All Puter Models');
-        puterFamiliesList.appendChild(allLabel);
 
-        families.forEach(family => {
+        const createRadio = (value, labelText, checked = false) => {
             const label = document.createElement('label');
             const radio = document.createElement('input');
             radio.type = 'radio';
             radio.name = 'puter-family';
-            radio.value = family;
+            radio.value = value;
+            radio.checked = checked;
+            const span = document.createElement('span');
+            span.textContent = labelText;
             label.appendChild(radio);
-            label.append(` ${family}`);
-            puterFamiliesList.appendChild(label);
+            label.appendChild(span);
+            return label;
+        };
+
+        puterFamiliesList.appendChild(createRadio('', 'All Models', true));
+        families.forEach(family => {
+            puterFamiliesList.appendChild(createRadio(family, family));
         });
     }
 
-    function escapeHtml(unsafe) {
-        return unsafe
-             .replace(/&/g, "&amp;")
-             .replace(/</g, "&lt;")
-             .replace(/>/g, "&gt;")
-             .replace(/"/g, "&quot;")
-             .replace(/'/g, "&#039;");
-    }
-
-    // --- API Key History Functions ---
     async function fetchAndDisplayApiKeys() {
         try {
             const response = await fetch('/api/keys', {
@@ -181,6 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const keys = await response.json();
             renderApiKeys(keys);
+            updatePlaygroundKeys(keys);
         } catch (error) {
             apiKeyHistoryContainer.innerHTML = `<p style="color: red;">${error.message}</p>`;
         }
@@ -191,46 +301,70 @@ document.addEventListener('DOMContentLoaded', () => {
             apiKeyHistoryContainer.innerHTML = '<p>No API keys generated yet.</p>';
             return;
         }
-        apiKeyHistoryContainer.innerHTML = ''; // Clear previous content
 
-        const table = document.createElement('table');
-        table.className = 'api-key-table';
-        table.innerHTML = `
-            <thead>
-                <tr>
-                    <th>Provider</th>
-                    <th>Key (Partial)</th>
-                    <th>Created On</th>
-                    <th>Action</th>
-                </tr>
-            </thead>
+        let html = `
+            <table class="api-key-table">
+                <thead>
+                    <tr>
+                        <th>Provider</th>
+                        <th>Key (Partial)</th>
+                        <th>Created</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
         `;
-        const tbody = document.createElement('tbody');
+
         keys.forEach(key => {
-            const tr = document.createElement('tr');
-            const partialKey = `...${key.api_key.slice(-12)}`;
-            const createdDate = new Date(key.created_at).toLocaleDateString();
-
-            tr.innerHTML = `
-                <td>${escapeHtml(key.provider)}</td>
-                <td title="${escapeHtml(key.api_key)}">${escapeHtml(partialKey)}</td>
-                <td>${createdDate}</td>
-                <td><button class="delete-key-btn" data-key-id="${key.id}">Delete</button></td>
+            const partialKey = `${key.api_key.substring(0, 8)}...${key.api_key.slice(-8)}`;
+            const date = new Date(key.created_at).toLocaleDateString();
+            html += `
+                <tr>
+                    <td><strong>${key.provider.toUpperCase()}</strong></td>
+                    <td title="${key.api_key}"><code>${partialKey}</code></td>
+                    <td>${date}</td>
+                    <td><button class="delete-key-btn" data-id="${key.id}"><i class="bi bi-trash"></i></button></td>
+                </tr>
             `;
-            tbody.appendChild(tr);
         });
-        table.appendChild(tbody);
-        apiKeyHistoryContainer.appendChild(table);
 
-        // Add event listeners to delete buttons
-        document.querySelectorAll('.delete-key-btn').forEach(button => {
-            button.addEventListener('click', (e) => {
-                const keyId = e.target.getAttribute('data-key-id');
-                if (confirm('Are you sure you want to delete this API key? This action cannot be undone.')) {
-                    deleteApiKey(keyId);
+        html += '</tbody></table>';
+        apiKeyHistoryContainer.innerHTML = html;
+
+        document.querySelectorAll('.delete-key-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = btn.getAttribute('data-id');
+                if (confirm('Are you sure you want to delete this key?')) {
+                    deleteApiKey(id);
                 }
             });
         });
+    }
+
+    function updatePlaygroundKeys(keys) {
+        const currentVal = playgroundKeySelect.value;
+        playgroundKeySelect.innerHTML = '<option value="">-- Select a key --</option>';
+        keys.forEach(key => {
+            const option = document.createElement('option');
+            option.value = key.api_key;
+            option.textContent = `${key.provider} (${key.api_key.substring(0, 8)}...)`;
+            playgroundKeySelect.appendChild(option);
+        });
+        playgroundKeySelect.value = currentVal;
+    }
+
+    async function fetchUserInfo() {
+        try {
+            const response = await fetch('/api/me', {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                userEmailSpan.textContent = data.email;
+            }
+        } catch (error) {
+            console.error('Failed to fetch user info:', error);
+        }
     }
 
     async function deleteApiKey(keyId) {
@@ -239,13 +373,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${authToken}` }
             });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.error || 'Failed to delete key.');
-
-            // Refresh the list after successful deletion
+            if (!response.ok) throw new Error('Failed to delete key.');
             fetchAndDisplayApiKeys();
         } catch (error) {
-            alert(`Error: ${error.message}`);
+            alert(error.message);
         }
     }
 });
