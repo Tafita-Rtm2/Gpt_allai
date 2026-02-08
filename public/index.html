@@ -1,71 +1,57 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>RTM Auth</title>
-  <link rel="stylesheet" href="new-style.css"/>
-  <link rel="stylesheet" href="auth-style.css"/>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet"/>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome - RTM AI Proxy</title>
+    <link rel="stylesheet" href="style.css">
 </head>
-<body class="fluid-auth-bg">
-  <div class="auth-container">
-    <!-- LOGIN -->
-    <div class="auth-box active" id="login-form-wrapper">
-      <div class="fluid-bg"></div>
-
-      <div class="logo-container">
-          <div class="logo-wrapper">
-              <img src="assets/rtmlogo.jpg" alt="RTM Logo">
-          </div>
-      </div>
-
-      <h1>Welcome Back</h1>
-      <form id="login-form">
-        <div class="input-group">
-          <i class="bi bi-envelope-fill"></i>
-          <input type="email" id="login-email" placeholder="Email Address" required/>
+<body>
+    <div class="auth-container">
+        <div class="auth-form-wrapper" id="login-form-wrapper">
+            <header>
+                <h1>Welcome Back!</h1>
+                <p>Log in to access your dashboard.</p>
+            </header>
+            <form id="login-form">
+                <div class="input-group">
+                    <label for="login-email">Email</label>
+                    <input type="email" id="login-email" required>
+                </div>
+                <div class="input-group">
+                    <label for="login-password">Password</label>
+                    <input type="password" id="login-password" required>
+                </div>
+                <button type="submit" class="btn-primary">Log In</button>
+                <p class="message" id="login-message"></p>
+            </form>
+            <p class="toggle-link">
+                Don't have an account? <a href="#" id="show-register">Sign up</a>
+            </p>
         </div>
-        <div class="input-group">
-          <i class="bi bi-lock-fill"></i>
-          <input type="password" id="login-password" placeholder="Password" required/>
-          <i class="bi bi-eye-slash toggle-pass"></i>
+
+        <div class="auth-form-wrapper hidden" id="register-form-wrapper">
+            <header>
+                <h1>Create Account</h1>
+                <p>Get started by creating a new account.</p>
+            </header>
+            <form id="register-form">
+                <div class="input-group">
+                    <label for="register-email">Email</label>
+                    <input type="email" id="register-email" required>
+                </div>
+                <div class="input-group">
+                    <label for="register-password">Password</label>
+                    <input type="password" id="register-password" required>
+                </div>
+                <button type="submit" class="btn-primary">Sign Up</button>
+                <p class="message" id="register-message"></p>
+            </form>
+            <p class="toggle-link">
+                Already have an account? <a href="#" id="show-login">Log in</a>
+            </p>
         </div>
-        <div id="login-message" class="message"></div>
-        <a href="#" class="forgot">Forgot Password?</a>
-        <button type="submit" class="btn"><i class="bi bi-box-arrow-in-right"></i> Sign in</button>
-      </form>
-      <p class="switch">Don’t have an account? <a href="#" id="show-register">Sign up</a></p>
     </div>
-
-    <!-- SIGNUP -->
-    <div class="auth-box" id="register-form-wrapper">
-      <div class="fluid-bg"></div>
-
-      <div class="logo-container">
-          <div class="logo-wrapper">
-              <img src="assets/rtmlogo.jpg" alt="RTM Logo">
-          </div>
-      </div>
-
-      <h1>Sign up</h1>
-      <form id="register-form">
-        <div class="input-group">
-          <i class="bi bi-envelope-fill"></i>
-          <input type="email" id="register-email" placeholder="Email Address" required/>
-        </div>
-        <div class="input-group">
-          <i class="bi bi-lock-fill"></i>
-          <input type="password" id="register-password" placeholder="Password" required/>
-          <i class="bi bi-eye-slash toggle-pass"></i>
-        </div>
-        <div id="register-message" class="message"></div>
-        <button type="submit" class="btn"><i class="bi bi-person-plus-fill"></i> Create Account</button>
-      </form>
-      <p class="switch">Already have an account? <a href="#" id="show-login">Log in</a></p>
-    </div>
-  </div>
-
-  <script src="script.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
